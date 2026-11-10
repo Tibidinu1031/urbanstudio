@@ -64,13 +64,15 @@ function render() {
   </header>
 
   <div class="page">
-    <section class="hello rise" style="--d:0">
-      <div class="eyebrow">${fmt.dayLong(now)}</div>
-      <h1 class="display">${fmt.greeting(now)}${first ? `,<br><span>${esc(first)}</span>` : ''}</h1>
+   <h1 class="sr-only">${fmt.greeting(now)}${first ? `, ${esc(first)}` : ''}. Urban Studio</h1>
+   <!-- primul ecran: încape exact între bara de sus și bara de jos, fără nimic acoperit -->
+   <div class="fold">
+    <div class="status-row rise" style="--d:0">
       <button class="status ${st.open ? '' : 'status--closed'}" type="button" data-act="hours">
-        <i class="live-dot"></i>${st.text}<span>· ${st.sub}</span>${icon('chevR')}
+        <i class="live-dot"></i>${st.text}${next ? '' : `<span>· ${st.sub}</span>`}${icon('chevR')}
       </button>
-    </section>
+      ${next ? `<button class="status status--next" type="button" data-act="agenda">${icon('bell')}${fmt.relDay(fmt.date(next.date, next.time))}, ${next.time}</button>` : ''}
+    </div>
 
     <section class="hero rise" style="--d:1">
       <div class="hero__media" data-act="about" role="link" tabindex="0" aria-label="Despre salon">
@@ -81,7 +83,7 @@ function render() {
         <span class="chip chip--glass">${icon('star')} ${String(SALON.rating.score).replace('.', ',')}</span>
       </div>
       <div class="hero__body">
-        <div class="hero__title">Barbershop<br>și academie</div>
+        <div class="hero__title">Barbershop <br>și academie</div>
         <button class="finder press" type="button" data-act="book">
           <span class="finder__icon">${icon('scissors')}</span>
           <span class="finder__text">Programează-te</span>
@@ -90,9 +92,7 @@ function render() {
       </div>
     </section>
 
-    ${next ? nextCard(next) : ''}
-
-    <section class="sec rise" style="--d:3">
+    <section class="quick rise" style="--d:2">
       <div class="sec__head">
         <div><h2 class="sec__title">Rezervare rapidă</h2><p class="sec__sub">Alege serviciul și treci direct la frizer</p></div>
         <button class="link-btn" type="button" data-act="book">Toate ${icon('chevR')}</button>
@@ -105,6 +105,9 @@ function render() {
           </button>`).join('')}
       </div>
     </section>
+   </div>
+
+    ${next ? `<div class="sec">${nextCard(next)}</div>` : ''}
 
     <section class="sec">
       <div class="sec__head"><div><h2 class="sec__title">Echipa</h2><p class="sec__sub">Alege-ți frizerul preferat</p></div></div>
