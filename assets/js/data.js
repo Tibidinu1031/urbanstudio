@@ -117,7 +117,7 @@ const G = (n, w, h, alt, pos = '50% 50%') => ({
   w, h, alt, pos,
 });
 export const PHOTOS = [
-  G('01', 1200, 900, 'Salonul, cu toate posturile ocupate'),
+  G('01', 1080, 810, 'Salonul, cu toate posturile ocupate'),
   G('02', 472, 1024, 'Skin fade cu barbă conturată', '50% 35%'),
   G('03', 1080, 750, 'Fade lucrat cu mașina', '60% 50%'),
   G('04', 768, 1024, 'Fade cu volum texturat', '50% 40%'),
@@ -127,7 +127,7 @@ export const PHOTOS = [
   G('08', 768, 1024, 'Low fade la ceafă', '50% 45%'),
   G('09', 640, 640, 'Fade și barbă, două unghiuri'),
   G('10', 640, 640, 'Crop texturat'),
-  G('11', 1200, 813, 'O zi obișnuită în salon'),
+  G('11', 1080, 732, 'O zi obișnuită în salon'),
   G('12', 472, 1024, 'Fade pentru cei mici', '50% 35%'),
   G('13', 640, 640, 'Detalii cu trimmerul'),
   G('14', 472, 1024, 'Platinat, stil texturat', '50% 30%'),

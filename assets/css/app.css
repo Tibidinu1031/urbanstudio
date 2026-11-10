@@ -31,7 +31,9 @@
   --green-soft: rgba(51, 209, 122, .14);
   --amber: #F2B441;
 
-  --pole: repeating-linear-gradient(-45deg, var(--red) 0 7px, #F4F4F2 7px 14px, var(--blue) 14px 21px, #F4F4F2 21px 28px);
+  /* plăcuță pătrată cu exact 2 perioade pe diagonală: se repetă fără cusături */
+  --pole: linear-gradient(-45deg, var(--red) 0 12.5%, #F4F4F2 12.5% 25%, var(--blue) 25% 37.5%, #F4F4F2 37.5% 50%, var(--red) 50% 62.5%, #F4F4F2 62.5% 75%, var(--blue) 75% 87.5%, #F4F4F2 87.5% 100%);
+  --pole-s: 40px;
 
   --r-sm: 12px;
   --r-md: 16px;
@@ -303,6 +305,35 @@ body.intro .view.is-active .rise {
 .hello { padding: 10px var(--gutter) 0; }
 .hello .eyebrow { margin-bottom: 8px; text-transform: none; }
 
+/* hero: fotografia salonului în primul ecran, cu butonul de programare peste ea */
+.hero {
+  position: relative; isolation: isolate; overflow: hidden;
+  margin: 18px var(--gutter) 0; height: 300px; border-radius: 26px;
+  background: var(--surface-2);
+  box-shadow: inset 0 0 0 1px var(--line), 0 18px 50px rgba(0, 0, 0, .35);
+}
+.hero__media { position: absolute; inset: 0; z-index: -1; cursor: pointer; }
+.hero__media img {
+  width: 100%; height: 100%; object-fit: cover;
+  background-size: cover; background-position: center; background-repeat: no-repeat;
+  transform: scale(1.03); transition: transform 1.2s var(--ease-out);
+}
+.hero__media:active img { transform: scale(1.07); }
+.hero__media::after {
+  content: ""; position: absolute; inset: 0;
+  background: linear-gradient(180deg, rgba(14, 15, 17, .25) 0%, rgba(14, 15, 17, 0) 24%, rgba(14, 15, 17, .5) 46%, rgba(14, 15, 17, .82) 66%, rgba(14, 15, 17, .96) 100%);
+}
+.hero__top { position: absolute; top: 14px; left: 14px; right: 14px; display: flex; justify-content: space-between; gap: 8px; pointer-events: none; }
+.hero__body { position: absolute; left: 10px; right: 10px; bottom: 10px; pointer-events: none; }
+.hero__title { padding: 0 10px 14px; font-size: 27px; line-height: 1.02; font-weight: 800; letter-spacing: -.026em; text-shadow: 0 2px 18px rgba(0, 0, 0, .5); }
+.hero .finder {
+  pointer-events: auto;
+  width: 100%; margin: 0;
+  background: rgba(30, 31, 35, .74);
+  -webkit-backdrop-filter: blur(20px) saturate(170%); backdrop-filter: blur(20px) saturate(170%);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .1), 0 10px 30px rgba(0, 0, 0, .35);
+}
+
 .finder {
   appearance: none; border: 0; width: calc(100% - 2 * var(--gutter));
   margin: 22px var(--gutter) 0;
@@ -329,7 +360,7 @@ body.intro .view.is-active .rise {
 }
 .next::before {
   content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 4px;
-  background: var(--pole); background-size: 28px 28px;
+  background: var(--pole); background-size: var(--pole-s) var(--pole-s);
 }
 .next__head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .next__time {
@@ -375,27 +406,6 @@ body.intro .view.is-active .rise {
 }
 .tile__name { display: block; font-size: 16px; font-weight: 800; letter-spacing: -.01em; }
 .tile__meta { display: block; margin-top: 2px; font-size: 13px; font-weight: 700; color: var(--fg-3); }
-
-.promo {
-  position: relative; display: block; isolation: isolate;
-  margin: 0 var(--gutter); height: 228px; border-radius: 24px; overflow: hidden;
-  box-shadow: inset 0 0 0 1px var(--line);
-  background: var(--surface);
-}
-.promo img {
-  position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: -2;
-  transform: scale(1.02); transition: transform 1.2s var(--ease-out);
-}
-.promo:active img { transform: scale(1.06); }
-.promo::after {
-  content: ""; position: absolute; inset: 0; z-index: -1;
-  background: linear-gradient(180deg, rgba(14, 15, 17, 0) 25%, rgba(14, 15, 17, .55) 55%, rgba(14, 15, 17, .94) 100%);
-}
-.promo__top { position: absolute; top: 14px; left: 14px; right: 14px; display: flex; justify-content: space-between; }
-.promo__body { position: absolute; left: 18px; right: 18px; bottom: 16px; }
-.promo__title { font-size: 24px; line-height: 1.05; font-weight: 800; letter-spacing: -.022em; }
-.promo__sub { margin-top: 6px; font-size: 14px; font-weight: 600; color: var(--fg-2); display: flex; align-items: center; gap: 6px; }
-.promo__sub .i { width: 15px; height: 15px; color: var(--amber); }
 
 .barber-card {
   appearance: none; border: 0; text-align: left; color: var(--fg);
@@ -533,11 +543,11 @@ body.intro .view.is-active .rise {
   background:
     linear-gradient(90deg, rgba(0, 0, 0, .45), rgba(255, 255, 255, .18) 38%, rgba(255, 255, 255, 0) 55%, rgba(0, 0, 0, .5)),
     var(--pole);
-  background-size: 100% 100%, 28px 28px;
+  background-size: 100% 100%, var(--pole-s) var(--pole-s);
   box-shadow: 0 0 0 4px var(--surface-3), 0 0 0 5px var(--line-2), 0 14px 30px rgba(0, 0, 0, .4);
   animation: poleClimb 1.4s linear infinite;
 }
-@keyframes poleClimb { to { background-position: 0 0, 0 -28px; } }
+@keyframes poleClimb { to { background-position: 0 0, 0 calc(var(--pole-s) * -1); } }
 .academy__title { font-size: 22px; font-weight: 800; letter-spacing: -.02em; margin-top: 12px; max-width: 75%; }
 .academy__text { margin-top: 8px; color: var(--fg-2); font-size: 14.5px; font-weight: 600; max-width: 92%; }
 .academy__meta { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
@@ -816,10 +826,10 @@ textarea.input { height: 92px; padding: 15px 16px; resize: none; line-height: 1.
 }
 .ticket__stripe {
   height: 6px; border-radius: 24px 24px 0 0;
-  background: var(--pole); background-size: 28px 28px;
+  background: var(--pole); background-size: var(--pole-s) var(--pole-s);
   animation: poleMove 1.6s linear infinite;
 }
-@keyframes poleMove { to { background-position: 28px 0; } }
+@keyframes poleMove { to { background-position: var(--pole-s) 0; } }
 .ticket__main { display: flex; align-items: center; gap: 14px; height: 100px; padding: 0 20px; }
 .ticket__main .grow { flex: 1; min-width: 0; }
 .ticket__main b { display: block; font-size: 17px; font-weight: 800; letter-spacing: -.01em; }
@@ -1009,8 +1019,8 @@ body.booting .tabbar { transform: translate(-50%, calc(100% + 40px)); opacity: 0
 }
 .car__item img {
   position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover;
+  background-size: cover; background-repeat: no-repeat;
   transform: translateX(calc(var(--x) * -14%)) scale(1.22);
-  will-change: transform;
 }
 .car__item::after {
   content: ""; position: absolute; inset: 0;
@@ -1054,7 +1064,11 @@ body.booting .tabbar { transform: translate(-50%, calc(100% + 40px)); opacity: 0
 }
 .grid__item:nth-child(10n + 1) { grid-column: span 2; grid-row: span 2; }
 .grid__item:nth-child(10n + 7) { grid-column: 2 / span 2; grid-row: span 2; }
-.grid__item img { width: 100%; height: 100%; object-fit: cover; transition: transform .5s var(--ease-out), opacity .4s; }
+.grid__item img {
+  width: 100%; height: 100%; object-fit: cover;
+  background-size: cover; background-repeat: no-repeat;
+  transition: transform .5s var(--ease-out);
+}
 .grid__item:active img { transform: scale(1.05); }
 
 .fade-img { opacity: 0; transition: opacity .5s ease; }
@@ -1171,7 +1185,14 @@ body.booting .tabbar { transform: translate(-50%, calc(100% + 40px)); opacity: 0
 .lb.is-ready .lb__track { opacity: 1; }
 .lb__track::-webkit-scrollbar { display: none; }
 .lb__slide { flex: none; width: 100%; height: 100%; scroll-snap-align: center; scroll-snap-stop: always; display: grid; place-items: center; }
-.lb__img { max-width: 100%; max-height: 100%; width: auto; height: auto; object-fit: contain; user-select: none; -webkit-user-drag: none; will-change: transform; }
+/* cutie dimensionată din raportul pozei: miniatura de fundal o umple perfect până se încarcă originalul */
+.lb__img {
+  width: min(100vw, calc(100dvh * var(--ar, 1)));
+  height: auto; aspect-ratio: var(--ar, 1);
+  object-fit: cover;
+  background-size: cover; background-position: center; background-repeat: no-repeat;
+  user-select: none; -webkit-user-drag: none;
+}
 .lb__ui { transition: opacity .3s ease; }
 .lb:not(.is-ready) .lb__ui, .lb.is-dragging .lb__ui { opacity: 0; }
 .lb__top {
@@ -1235,7 +1256,7 @@ body.booting .tabbar { transform: translate(-50%, calc(100% + 40px)); opacity: 0
 .pole__fill {
   --p: 0;
   position: absolute; inset: 0;
-  background: var(--pole); background-size: 28px 28px;
+  background: var(--pole); background-size: var(--pole-s) var(--pole-s);
   clip-path: inset(0 calc(100% - var(--p) * 100%) 0 0 round 5px);
   animation: poleMove .9s linear infinite;
 }

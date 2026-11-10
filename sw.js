@@ -1,5 +1,5 @@
 /* Service worker: funcționare offline + reamintiri în fundal. */
-const VERSION = 'us-2026-11-10-1';
+const VERSION = 'us-2026-11-10-2';
 const SHELL = [
   './',
   'index.html',
@@ -65,7 +65,21 @@ self.addEventListener('fetch', (e) => {
     return;
   }
 
-  // resursele proprii: din cache, actualizate în fundal
+  // codul propriu (JS, CSS, manifest): rețea întâi, ca actualizările să apară imediat; cache doar offline
+  if (url.origin === self.location.origin && /\.(js|css|webmanifest)$/.test(url.pathname)) {
+    e.respondWith(caches.open(VERSION).then(async (c) => {
+      try {
+        const res = await fetch(req, { cache: 'no-cache' });
+        if (res.ok) c.put(req, res.clone());
+        return res;
+      } catch {
+        return (await c.match(req, { ignoreSearch: true })) || Response.error();
+      }
+    }));
+    return;
+  }
+
+  // imaginile proprii: din cache, actualizate în fundal
   if (url.origin === self.location.origin) {
     e.respondWith(caches.open(VERSION).then(async (c) => {
       const hit = await c.match(req, { ignoreSearch: true });

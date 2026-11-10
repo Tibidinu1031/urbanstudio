@@ -2,6 +2,9 @@
 import { icon } from './icons.js';
 import { esc, haptic, pushOverlay, popOverlay, reduceMotion, fadeImages } from './lib.js';
 
+/* Miniatura stă ca fundal sub poza mare: cât timp aceasta se descarcă, nu apare niciodată o zonă goală. */
+export const ph = (p) => `object-position:${p.pos};background-image:url('${p.thumb}');background-position:${p.pos}`;
+
 /* ---------- carusel ---------- */
 export function carouselHTML(photos) {
   return `
@@ -9,7 +12,7 @@ export function carouselHTML(photos) {
     <div class="car__track" data-car>
       ${photos.map((p, i) => `
         <button class="car__item" type="button" data-photo="${i}" aria-label="Deschide fotografia ${i + 1}: ${esc(p.alt)}">
-          <img src="${p.src}" alt="${esc(p.alt)}" ${i > 2 ? 'loading="lazy"' : ''} decoding="async" style="object-position:${p.pos}">
+          <img src="${p.src}" alt="${esc(p.alt)}" width="${p.w}" height="${p.h}" ${i > 3 ? 'loading="lazy"' : ''} decoding="async" style="${ph(p)}">
           <span class="car__cap"><small>${String(i + 1).padStart(2, '0')}</small>${esc(p.alt)}</span>
         </button>`).join('')}
     </div>
@@ -107,7 +110,7 @@ export function openLightbox(photos, index, originImg) {
   lb.innerHTML = `
     <div class="lb__bg"></div>
     <div class="lb__track">
-      ${photos.map((p, i) => `<div class="lb__slide"><img class="lb__img" src="${Math.abs(i - index) <= 1 ? p.src : ''}" data-src="${p.src}" alt="${esc(p.alt)}" decoding="async"></div>`).join('')}
+      ${photos.map((p, i) => `<div class="lb__slide"><img class="lb__img" src="${Math.abs(i - index) <= 1 ? p.src : ''}" data-src="${p.src}" alt="${esc(p.alt)}" decoding="async" style="--ar:${p.w}/${p.h};background-image:url('${p.thumb}')"></div>`).join('')}
     </div>
     <div class="lb__top lb__ui">
       <span class="lb__count tnum"></span>
@@ -290,6 +293,6 @@ export function openLightbox(photos, index, originImg) {
 export function gridHTML(photos) {
   return `<div class="grid">${photos.map((p, i) => `
     <button class="grid__item" type="button" data-photo="${i}" aria-label="${esc(p.alt)}">
-      <img class="fade-img" src="${i % 10 === 0 || i % 10 === 6 ? p.src : p.thumb}" alt="${esc(p.alt)}" loading="lazy" decoding="async" style="object-position:${p.pos}">
+      <img src="${i % 10 === 0 || i % 10 === 6 ? p.src : p.thumb}" alt="${esc(p.alt)}" loading="lazy" decoding="async" style="${ph(p)}">
     </button>`).join('')}</div>`;
 }

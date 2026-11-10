@@ -72,11 +72,23 @@ function render() {
       </button>
     </section>
 
-    <button class="finder press rise" style="--d:1" type="button" data-act="book">
-      <span class="finder__icon">${icon('scissors')}</span>
-      <span class="finder__text">Programează-te</span>
-      <span class="finder__when">${icon('clock')} <span data-next-free>${naText}</span></span>
-    </button>
+    <section class="hero rise" style="--d:1">
+      <div class="hero__media" data-act="about" role="link" tabindex="0" aria-label="Despre salon">
+        <img src="${PHOTOS[0].src}" alt="" decoding="async" fetchpriority="high" style="background-image:url('${PHOTOS[0].thumb}')">
+      </div>
+      <div class="hero__top">
+        <span class="chip chip--glass">${icon('pin')} Ploiești · Str. Panduri 2</span>
+        <span class="chip chip--glass">${icon('star')} ${String(SALON.rating.score).replace('.', ',')}</span>
+      </div>
+      <div class="hero__body">
+        <div class="hero__title">Barbershop<br>și academie</div>
+        <button class="finder press" type="button" data-act="book">
+          <span class="finder__icon">${icon('scissors')}</span>
+          <span class="finder__text">Programează-te</span>
+          <span class="finder__when">${icon('clock')} <span data-next-free>${naText}</span></span>
+        </button>
+      </div>
+    </section>
 
     ${next ? nextCard(next) : ''}
 
@@ -92,17 +104,6 @@ function render() {
             <span><span class="tile__name">${esc(s.name)}</span><span class="tile__meta">${fmt.price(s.price)} · ${fmt.duration(s.duration)}</span></span>
           </button>`).join('')}
       </div>
-    </section>
-
-    <section class="sec rise" style="--d:4">
-      <a class="promo" href="#/despre" data-act="about">
-        <img src="${PHOTOS[0].src}" alt="" loading="lazy" decoding="async">
-        <div class="promo__top"><span class="chip chip--glass">Ploiești · Str. Panduri 2</span></div>
-        <div class="promo__body">
-          <div class="promo__title">Barbershop<br>și academie</div>
-          <div class="promo__sub">${icon('star')} ${String(SALON.rating.score).replace('.', ',')} · ${SALON.rating.count.toLocaleString('ro-RO')} recenzii pe mero</div>
-        </div>
-      </a>
     </section>
 
     <section class="sec">
@@ -189,7 +190,7 @@ function onClick(e) {
   if (t.dataset.barber) { haptic(); barberSheet(t.dataset.barber); return; }
   if (t.dataset.photo) { haptic(); openLightbox(PHOTOS, Number(t.dataset.photo), t.querySelector('img')); return; }
   if (t.hasAttribute('data-directions') || act === 'directions') { haptic(); directionsSheet(); return; }
-  if (act === 'book') { haptic(); bus.emit('book:start', {}); }
+  if (act === 'book') { e.stopPropagation(); haptic(); bus.emit('book:start', {}); }
   else if (act === 'hours') { haptic(); hoursSheet(); }
   else if (act === 'agenda') { haptic(); bus.emit('nav', 'agenda'); }
   else if (act === 'about') { e.preventDefault(); haptic(); bus.emit('nav', 'about'); }
