@@ -13,7 +13,9 @@
 
 const CFG = {
   salonName: 'Urban Studio',
-  salonEmail: 'urbanstudio115@gmail.com',
+  // Gol = emailurile despre programări merg doar la proprietarul acestui script (contul Google în care rulează).
+  // Pune aici adresa salonului (urbanstudio115@gmail.com) când predai aplicația.
+  salonEmail: '',
   smsPhoneDefault: '0728933035',
   tz: 'Europe/Bucharest',
   slotStep: 15,
@@ -120,7 +122,7 @@ function publicCancel_(id, phone) {
   if (!b) return { ok: false, error: 'notfound' };
   if (digits_(b.phone).slice(-9) !== digits_(phone).slice(-9)) return { ok: false, error: 'auth' };
   cancelRow_(b);
-  if (CFG.notifySalonByEmail) MailApp.sendEmail(CFG.salonEmail, `Programare anulată: ${b.name} · ${b.date} ${b.time}`, `Clientul a anulat din aplicație. Cod: ${b.id}, frizer: ${b.barberName}.`);
+  if (CFG.notifySalonByEmail) MailApp.sendEmail(notifyTo_(), `Programare anulată: ${b.name} · ${b.date} ${b.time}`, `Clientul a anulat din aplicație. Cod: ${b.id}, frizer: ${b.barberName}.`);
   return { ok: true };
 }
 
@@ -275,7 +277,7 @@ function insertBooking_(b, source, barber) {
     updateRow_(SH.bookings, B_HEAD, row._row, { smsConfirm: row.smsConfirm, smsConfirmAt: row.smsConfirmAt });
   }
   if (CFG.notifySalonByEmail && source === 'app') {
-    MailApp.sendEmail(CFG.salonEmail, `Programare nouă: ${row.name} · ${row.date} ${row.time}`,
+    MailApp.sendEmail(notifyTo_(), `Programare nouă: ${row.name} · ${row.date} ${row.time}`,
       `${row.serviceName} cu ${row.barberName}\n${row.date}, ora ${row.time} (${row.duration} min)\nClient: ${row.name}, ${row.phone}\n${row.notes ? 'Mesaj: ' + row.notes + '\n' : ''}Cod: ${row.id}`);
   }
   return row;
@@ -420,6 +422,7 @@ function toClient_(r) {
 }
 
 /* ======================= utilitare ======================= */
+function notifyTo_() { return CFG.salonEmail || Session.getEffectiveUser().getEmail(); }
 function json_(o) { return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON); }
 function toMin_(t) { const p = String(t).split(':'); return Number(p[0]) * 60 + Number(p[1]); }
 function addMin_(t, m) { const x = toMin_(t) + Number(m); return `${String(Math.floor(x / 60)).padStart(2, '0')}:${String(x % 60).padStart(2, '0')}`; }
