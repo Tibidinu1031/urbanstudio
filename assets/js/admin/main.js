@@ -67,9 +67,9 @@ function showLogin(message = '') {
     btn.disabled = true;
     btn.textContent = 'Se verifică';
     const r = await Admin.login(u, p);
-    btn.disabled = false;
-    btn.textContent = 'Intră';
     if (!r.ok) {
+      btn.disabled = false;
+      btn.textContent = 'Intră';
       haptic('heavy');
       err.textContent = r.error === 'network' ? 'Fără conexiune la server.' : 'Utilizator sau parolă greșite.';
       err.classList.add('is-on');
@@ -77,16 +77,31 @@ function showLogin(message = '') {
       return;
     }
     haptic('success');
-    start();
+    btn.textContent = 'Se încarcă agenda';
+    start(r.user);
   });
   setTimeout(() => $('#lg-user')?.focus(), 200);
 }
 
+function showLoading() {
+  const box = $('#login');
+  box.hidden = false;
+  box.innerHTML = `
+    <div class="login__logo">${logoSVG()}</div>
+    <span class="login__eyebrow">Panou frizeri</span>
+    <h1>Se încarcă agenda</h1>
+    <div class="pole" style="margin-top:28px;width:100%;max-width:220px;opacity:1;animation:none"><div class="pole__fill" style="--p:1"></div></div>`;
+}
+
 /* ---------- shell ---------- */
-async function start() {
-  const me = await Admin.me();
-  if (!me.ok) { showLogin(me.error === 'network' ? 'Fără conexiune la server.' : ''); return; }
-  state.user = me.user;
+async function start(user) {
+  if (!user) {
+    showLoading();
+    const me = await Admin.me();
+    if (!me.ok) { showLogin(me.error === 'network' ? 'Fără conexiune la server.' : ''); return; }
+    user = me.user;
+  }
+  state.user = user;
   state.autoSms = Admin.smsAuto();
   await reloadAll();
   $('#login').hidden = true;

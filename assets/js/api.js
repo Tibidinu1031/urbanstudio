@@ -64,33 +64,31 @@ async function post(payload) {
   return res.json();
 }
 
+function applyPublic(data) {
+  remote.barbers = data.barbers || [];
+  remote.busy = {};
+  for (const it of data.busy || []) {
+    const day = (remote.busy[it.date] ||= {});
+    (day[it.barberId] ||= []).push([toMin(it.from), toMin(it.to)]);
+  }
+  remote.sms = !!data.sms;
+}
+
 async function loadPublic() {
   try {
     const res = await fetch(`${CONFIG.apiUrl}?action=public`);
     const data = await res.json();
     if (!data.ok) throw new Error('public');
-    remote.barbers = data.barbers || [];
-    remote.busy = {};
-    for (const it of data.busy || []) {
-      const day = (remote.busy[it.date] ||= {});
-      (day[it.barberId] ||= []).push([toMin(it.from), toMin(it.to)]);
-    }
-    remote.sms = !!data.sms;
+    applyPublic(data);
     remote.loaded = true;
-    store.set('remoteCache', { barbers: remote.barbers, busy: data.busy || [], sms: remote.sms });
+    store.set('remoteCache', { barbers: data.barbers || [], busy: data.busy || [], sms: !!data.sms, at: Date.now() });
+    return true;
   } catch {
     // offline: ultima copie cunoscută
     const c = store.get('remoteCache', null);
-    if (c) {
-      remote.barbers = c.barbers;
-      remote.sms = c.sms;
-      for (const it of c.busy) {
-        const day = (remote.busy[it.date] ||= {});
-        (day[it.barberId] ||= []).push([toMin(it.from), toMin(it.to)]);
-      }
-    } else {
-      remote.barbers = localTeam().map((b) => pick(b, PUBLIC_FIELDS));
-    }
+    if (c) applyPublic(c);
+    else if (!remote.barbers.length) remote.barbers = localTeam().map((b) => pick(b, PUBLIC_FIELDS));
+    return false;
   }
 }
 
@@ -111,8 +109,12 @@ export function withSms(b, serverSms = false) {
 /* ---------- API public ---------- */
 export const Api = {
   async init() {
-    if (isRemote()) await loadPublic();
-    else localTeam();
+    if (!isRemote()) { localTeam(); return; }
+    // pornire instantă din ultima copie, apoi actualizare în fundal (serverul răspunde în 2-3 secunde)
+    const cached = store.get('remoteCache', null);
+    if (cached) applyPublic(cached);
+    const fresh = loadPublic().then((ok) => { if (ok && cached) bus.emit('team'); });
+    if (!cached) await Promise.race([fresh, new Promise((r) => setTimeout(r, 7000))]);
   },
   reloadLocal() { /* echipa locală se recitește la fiecare apel */ },
 

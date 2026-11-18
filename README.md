@@ -33,8 +33,8 @@ Conturi de test (schimbă parolele din panou, la Contul meu):
 
 ### Mod demo și mod server
 
-- **Demo (acum)**: fără server, datele stau în browserul telefonului. Panoul vede programările făcute din aplicație pe același telefon. Bun pentru prezentare.
-- **Server (recomandat)**: Google Apps Script gratuit, comun pentru toți frizerii, cu autentificare pe server și SMS automat prin httpSMS (telefon Android). Instalare în [backend/README.md](backend/README.md).
+- **Demo**: cu `CONFIG.apiUrl` gol, datele stau în browserul telefonului. Panoul vede programările făcute din aplicație pe același telefon.
+- **Server (activ)**: Google Apps Script gratuit, comun pentru toți frizerii, cu autentificare pe server. Programările se salvează în tabelul Google „Urban Studio · Programări”. SMS automat după ce adaugi cheia httpSMS (telefon Android). Detalii în [backend/README.md](backend/README.md).
 
 ## Structură
 

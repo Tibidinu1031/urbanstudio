@@ -17,6 +17,10 @@ Serverul de aici e gratuit și transformă totul într-un sistem comun:
 4. **Deploy → New deployment → Web app**. Execute as: **Me**. Who has access: **Anyone**. Copiază URL-ul care se termină în `/exec`.
 5. În `assets/js/data.js`, pune URL-ul la `CONFIG.apiUrl`, apoi commit și push.
 
+Dacă scriptul nu e creat din meniul tabelului (Extensii → Apps Script), completează `CFG.sheetId` cu ID-ul tabelului din URL (`/spreadsheets/d/ID/edit`). Altfel scriptul își creează singur tabelul la prima rulare.
+
+După orice modificare a codului din Apps Script: **Deploy → Manage deployments → creion → Version: New version → Deploy**. URL-ul rămâne același.
+
 Conturi create la instalare (schimbă parolele din panou, la Contul meu):
 
 | Utilizator | Parolă | Frizer |

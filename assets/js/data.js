@@ -3,7 +3,7 @@
 export const CONFIG = {
   // URL-ul aplicației web Google Apps Script (vezi backend/README.md).
   // Gol = aplicația funcționează local: disponibilitate simulată, reamintiri pe telefon.
-  apiUrl: '',
+  apiUrl: 'https://script.google.com/macros/s/AKfycbxD4fJphTnl7Yud99JmYLvCGyyfMtUdpOwsOP-IV8EsvQjhlCN11sRBnvsu8yIawo20DA/exec',
   slotStep: 15,            // pasul orelor afișate, în minute
   minLeadMinutes: 30,      // cât de devreme se poate face o programare pentru azi
   bookingDays: 28,         // câte zile în avans se poate rezerva

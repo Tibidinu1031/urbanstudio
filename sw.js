@@ -1,5 +1,5 @@
 /* Service worker: funcționare offline + reamintiri în fundal. */
-const VERSION = 'us-2026-11-18-1';
+const VERSION = 'us-2026-11-18-2';
 const SHELL = [
   './',
   'index.html',
