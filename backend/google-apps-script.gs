@@ -21,6 +21,8 @@ const CFG = {
   slotStep: 15,
   bookingDays: 35,
   notifySalonByEmail: true,
+  // ID-ul tabelului Google (din URL: /spreadsheets/d/ID/edit). Gol = tabelul de care e legat scriptul sau unul creat automat.
+  sheetId: '',
 };
 const SH = { bookings: 'Programari', team: 'Frizeri', sms: 'SMS' };
 const B_HEAD = ['id', 'status', 'source', 'createdAt', 'date', 'time', 'startMs', 'endMs', 'serviceId', 'serviceName', 'price', 'duration',
@@ -354,8 +356,16 @@ function smsText_(b, kind, barberPhone) {
 }
 
 /* ======================= foi de calcul ======================= */
+function ss_() {
+  const active = SpreadsheetApp.getActive();
+  if (active) return active;
+  const props = PropertiesService.getScriptProperties();
+  let id = CFG.sheetId || props.getProperty('SHEET_ID');
+  if (!id) { id = SpreadsheetApp.create('Urban Studio · Programări').getId(); props.setProperty('SHEET_ID', id); }
+  return SpreadsheetApp.openById(id);
+}
 function sheet_(name, head) {
-  const ss = SpreadsheetApp.getActive();
+  const ss = ss_();
   let sh = ss.getSheetByName(name);
   if (!sh) {
     sh = ss.insertSheet(name);
