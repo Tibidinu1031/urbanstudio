@@ -49,6 +49,26 @@ export function worksOn(date, barberId) {
 
 const overlaps = (blocks, a, b) => blocks.some(([x, y]) => a < y && b > x);
 
+/* grila de intervale (implicit 45 de minute de la 08:30): începuturile, în minute */
+export function gridSlots() {
+  const out = [];
+  const end = toMin(CONFIG.slotEnd || '21:15');
+  for (let t = toMin(CONFIG.slotStart || '08:30'); t + CONFIG.slotStep <= end; t += CONFIG.slotStep) out.push(t);
+  return out;
+}
+
+/* intervalele bifate (începuturi în minute) → intervale continue [['08:30','10:00'], ...] */
+export function mergeSlots(starts) {
+  const sorted = [...new Set(starts)].sort((a, b) => a - b);
+  const out = [];
+  for (const t of sorted) {
+    const last = out[out.length - 1];
+    if (last && last[1] === t) last[1] = t + CONFIG.slotStep;
+    else out.push([t, t + CONFIG.slotStep]);
+  }
+  return out.map(([a, b]) => [toTime(a), toTime(b)]);
+}
+
 export function freeSlots(date, barberId, duration, { ignoreId, ignoreLead = false, barbers, busyFn } = {}) {
   const iso = fmt.iso(date);
   const now = new Date();
@@ -58,12 +78,14 @@ export function freeSlots(date, barberId, duration, { ignoreId, ignoreLead = fal
   const list = barbers ? barbers.filter((b) => !barberId || barberId === 'any' || b.id === barberId) : pool(barberId);
   for (const b of list) {
     const busy = busyFn ? busyFn(iso, b.id) : Api.busy(iso, b.id, ignoreId);
-    for (const [from, to] of barberIntervals(b, date)) {
-      for (let t = from; t + duration <= to; t += CONFIG.slotStep) {
-        if (t < minStart || overlaps(busy, t, t + duration)) continue;
-        if (!map.has(t)) map.set(t, []);
-        map.get(t).push(b.id);
-      }
+    const iv = barberIntervals(b, date);
+    // orele pornesc doar din grila de 45 de minute; serviciul trebuie să încapă în intervalele bifate
+    for (const t of gridSlots()) {
+      if (t < minStart) continue;
+      if (!iv.some(([a, c]) => t >= a && t + duration <= c)) continue;
+      if (overlaps(busy, t, t + duration)) continue;
+      if (!map.has(t)) map.set(t, []);
+      map.get(t).push(b.id);
     }
   }
   return [...map.entries()].sort((a, b) => a[0] - b[0]).map(([t, ids]) => ({ time: toTime(t), min: t, barbers: ids }));

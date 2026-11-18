@@ -18,7 +18,7 @@ const CFG = {
   salonEmail: '',
   smsPhoneDefault: '0728933035',
   tz: 'Europe/Bucharest',
-  slotStep: 15,
+  slotStep: 45,
   bookingDays: 35,
   notifySalonByEmail: true,
   // ID-ul tabelului Google (din URL: /spreadsheets/d/ID/edit). Gol = tabelul de care e legat scriptul sau unul creat automat.

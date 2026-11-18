@@ -4,7 +4,9 @@ export const CONFIG = {
   // URL-ul aplicației web Google Apps Script (vezi backend/README.md).
   // Gol = aplicația funcționează local: disponibilitate simulată, reamintiri pe telefon.
   apiUrl: 'https://script.google.com/macros/s/AKfycbxD4fJphTnl7Yud99JmYLvCGyyfMtUdpOwsOP-IV8EsvQjhlCN11sRBnvsu8yIawo20DA/exec',
-  slotStep: 15,            // pasul orelor afișate, în minute
+  slotStep: 45,            // durata unui interval de programare, în minute
+  slotStart: '08:30',      // primul interval din grila pe care o bifează frizerii
+  slotEnd: '21:15',        // ultimul interval se termină cel târziu la această oră
   minLeadMinutes: 30,      // cât de devreme se poate face o programare pentru azi
   bookingDays: 28,         // câte zile în avans se poate rezerva
   reminderHours: 24,       // reamintirea principală: cu o zi înainte

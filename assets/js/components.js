@@ -57,7 +57,7 @@ export function barberSheet(id) {
 export function hoursSheet() {
   openSheet({
     title: 'Program',
-    body: `${hoursTable()}<p class="fineprint">${icon('info')}<span>Programările se fac pe intervale de 15 minute. Pentru ziua curentă, cu cel puțin 30 de minute înainte.</span></p>`,
+    body: `${hoursTable()}<p class="fineprint">${icon('info')}<span>Programările se fac pe intervale de 45 de minute, alese de fiecare frizer. Pentru ziua curentă, cu cel puțin 30 de minute înainte.</span></p>`,
     foot: `<a class="btn btn--secondary btn--block" href="tel:${SALON.phoneIntl}">${icon('phone')} Sună la salon</a>`,
   });
 }
