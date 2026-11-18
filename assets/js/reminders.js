@@ -260,21 +260,7 @@ export async function onCancelled(b) {
   armTimers();
 }
 
-/* ---------- server opțional (Google Apps Script) ---------- */
-export async function api(action, data) {
-  if (!CONFIG.apiUrl) return { ok: false, skipped: true };
-  try {
-    await fetch(CONFIG.apiUrl, {
-      method: 'POST',
-      mode: 'no-cors',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({ action, ...data }),
-    });
-    return { ok: true };
-  } catch (error) {
-    return { ok: false, error };
-  }
-}
+/* serverul (Google Apps Script) e accesat prin api.js */
 export const hasServer = () => !!CONFIG.apiUrl;
 
 export { DAY, HOUR };

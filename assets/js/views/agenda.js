@@ -3,7 +3,8 @@ import { SALON } from '../data.js';
 import { icon } from '../icons.js';
 import { esc, fmt, bus, haptic, toast, openSheet, isIOS, isStandalone } from '../lib.js';
 import { Bookings } from '../store.js';
-import { reminderText, notifState, enableNotifications, onCancelled, api } from '../reminders.js';
+import { reminderText, notifState, enableNotifications, onCancelled } from '../reminders.js';
+import { Api } from '../api.js';
 import { avatar, barberById, calendarSheet, directionsSheet, notifSheet } from '../components.js';
 
 let el;
@@ -154,7 +155,7 @@ function manage(b) {
   s.el.querySelector('[data-dir]').addEventListener('click', () => { s.close(); setTimeout(directionsSheet, 300); });
   const cancelBtn = s.el.querySelector('[data-cancel]');
   let armed = false;
-  cancelBtn.addEventListener('click', () => {
+  cancelBtn.addEventListener('click', async () => {
     haptic('heavy');
     if (!armed) {
       armed = true;
@@ -162,8 +163,7 @@ function manage(b) {
       setTimeout(() => { if (armed && document.body.contains(cancelBtn)) { armed = false; cancelBtn.innerHTML = `${icon('trash')} Anulează programarea`; } }, 3500);
       return;
     }
-    const upd = Bookings.update(b.id, { status: 'cancelled', cancelledAt: Date.now() });
-    api('cancel', { id: b.id });
+    const upd = await Api.cancel(b);
     onCancelled(upd);
     s.close();
     toast('Programarea a fost anulată', { ic: 'check' });

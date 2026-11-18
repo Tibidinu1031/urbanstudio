@@ -1,11 +1,13 @@
-/* Program, disponibilitate și calculul orelor libere. */
-import { SALON, CONFIG, BARBERS } from './data.js';
+/* Program, disponibilitate și calculul orelor libere.
+   Orele libere = programul fiecărui frizer (setat din panou) minus programările existente. */
+import { SALON, CONFIG } from './data.js';
 import { fmt } from './lib.js';
-import { Bookings } from './store.js';
+import { Api, defaultSchedule } from './api.js';
 
-export const toMin = (t) => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
+export const toMin = (t) => { const [h, m] = String(t).split(':').map(Number); return h * 60 + m; };
 export const toTime = (m) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
 
+/* programul general al salonului (pentru „Deschis acum”) */
 export function hoursFor(date) {
   const h = SALON.hours[date.getDay()];
   return h ? { open: toMin(h[0]), close: toMin(h[1]) } : null;
@@ -29,89 +31,42 @@ export function openStatus(now = new Date()) {
   return { open: false, text: 'Închis', sub: '' };
 }
 
-/* ---------- ocupare ---------- */
-// Fără server: ocupare simulată, stabilă pentru fiecare zi și frizer, ca agenda să pară reală.
-function hash(str) {
-  let h = 2166136261;
-  for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); }
-  return h >>> 0;
-}
-function rng(seed) {
-  return () => {
-    seed = (seed + 0x6D2B79F5) | 0;
-    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-const simCache = new Map();
-function simulatedBusy(iso, barberId, h) {
-  const key = `${iso}|${barberId}`;
-  if (simCache.has(key)) return simCache.get(key);
-  const r = rng(hash(key));
-  const load = barberId === 'adita' ? .62 : .42;
-  const blocks = [];
-  let t = h.open;
-  while (t < h.close) {
-    const len = [15, 30, 30, 45, 45, 60][Math.floor(r() * 6)];
-    if (r() < load) blocks.push([t, Math.min(h.close, t + len)]);
-    t += len;
-  }
-  simCache.set(key, blocks);
-  return blocks;
+/* intervalele de lucru ale unui frizer într-o zi, în minute */
+export function barberIntervals(barber, date) {
+  if (!barber) return [];
+  const s = barber.schedule || defaultSchedule();
+  const iso = fmt.iso(date);
+  const list = s.days && Object.prototype.hasOwnProperty.call(s.days, iso) ? s.days[iso] : (s.week?.[date.getDay()] || []);
+  return (list || []).map(([a, b]) => [toMin(a), toMin(b)]).filter(([a, b]) => b > a);
 }
 
-// Cu server (Google Apps Script): intervalele ocupate reale, pe zile.
-const remote = new Map(); // iso -> { barberId: [[from,to],...] }
-const remotePending = new Map();
-export async function loadRemote(iso) {
-  if (!CONFIG.apiUrl) return null;
-  if (remote.has(iso)) return remote.get(iso);
-  if (remotePending.has(iso)) return remotePending.get(iso);
-  const p = fetch(`${CONFIG.apiUrl}?action=busy&date=${iso}`)
-    .then((r) => r.json())
-    .then((data) => {
-      const map = {};
-      for (const it of data.busy || []) (map[it.barberId] ||= []).push([toMin(it.from), toMin(it.to)]);
-      remote.set(iso, map);
-      return map;
-    })
-    .catch(() => { remote.set(iso, {}); return {}; })
-    .finally(() => remotePending.delete(iso));
-  remotePending.set(iso, p);
-  return p;
-}
-export const remoteReady = (iso) => !CONFIG.apiUrl || remote.has(iso);
+const pool = (barberId) => (barberId === 'any' || !barberId ? Api.barbers() : [Api.barber(barberId)].filter(Boolean));
 
-function localBusy(iso, barberId, ignoreId) {
-  return Bookings.list()
-    .filter((b) => b.status === 'confirmed' && b.date === iso && b.barberId === barberId && b.id !== ignoreId)
-    .map((b) => [toMin(b.time), toMin(b.time) + b.duration]);
-}
-
-function busyFor(iso, barberId, h, ignoreId) {
-  const base = CONFIG.apiUrl ? (remote.get(iso)?.[barberId] || []) : simulatedBusy(iso, barberId, h);
-  return base.concat(localBusy(iso, barberId, ignoreId));
+/* lucrează cineva (sau frizerul ales) în ziua asta? */
+export function worksOn(date, barberId) {
+  return pool(barberId).some((b) => barberIntervals(b, date).length > 0);
 }
 
 const overlaps = (blocks, a, b) => blocks.some(([x, y]) => a < y && b > x);
 
-export function freeSlots(date, barberId, duration, { ignoreId } = {}) {
-  const h = hoursFor(date);
-  if (!h) return [];
+export function freeSlots(date, barberId, duration, { ignoreId, ignoreLead = false, barbers, busyFn } = {}) {
   const iso = fmt.iso(date);
   const now = new Date();
   const isToday = iso === fmt.iso(now);
-  const minStart = isToday ? now.getHours() * 60 + now.getMinutes() + CONFIG.minLeadMinutes : -1;
-  const ids = barberId === 'any' || !barberId ? BARBERS.map((b) => b.id) : [barberId];
-  const busy = Object.fromEntries(ids.map((id) => [id, busyFor(iso, id, h, ignoreId)]));
-  const out = [];
-  for (let t = h.open; t + duration <= h.close; t += CONFIG.slotStep) {
-    if (t < minStart) continue;
-    const free = ids.filter((id) => !overlaps(busy[id], t, t + duration));
-    if (free.length) out.push({ time: toTime(t), min: t, barbers: free });
+  const minStart = isToday && !ignoreLead ? now.getHours() * 60 + now.getMinutes() + CONFIG.minLeadMinutes : -1;
+  const map = new Map();
+  const list = barbers ? barbers.filter((b) => !barberId || barberId === 'any' || b.id === barberId) : pool(barberId);
+  for (const b of list) {
+    const busy = busyFn ? busyFn(iso, b.id) : Api.busy(iso, b.id, ignoreId);
+    for (const [from, to] of barberIntervals(b, date)) {
+      for (let t = from; t + duration <= to; t += CONFIG.slotStep) {
+        if (t < minStart || overlaps(busy, t, t + duration)) continue;
+        if (!map.has(t)) map.set(t, []);
+        map.get(t).push(b.id);
+      }
+    }
   }
-  return out;
+  return [...map.entries()].sort((a, b) => a[0] - b[0]).map(([t, ids]) => ({ time: toTime(t), min: t, barbers: ids }));
 }
 
 export function nextAvailable(barberId = 'any', duration = 30, from = new Date()) {

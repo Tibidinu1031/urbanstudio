@@ -1,51 +1,61 @@
-# Urban Studio · Programări online
+# Urban Studio · Programări online + panou frizeri
 
-Aplicație web (PWA) pentru **Urban Studio Barbering & Academy**, Ploiești. Clienții aleg serviciul, frizerul, ziua și ora, apoi primesc reamintire cu o zi înainte.
+Aplicație web (PWA) pentru **Urban Studio Barbering & Academy**, Ploiești. Clienții aleg serviciul, frizerul, ziua și ora. Frizerii își gestionează agenda, programul și echipa din panou, iar clienții primesc SMS de confirmare și reminder cu o zi înainte.
+
+- Aplicația clienților: `https://tibidinu1031.github.io/urbanstudio/`
+- Panoul frizerilor: `https://tibidinu1031.github.io/urbanstudio/admin/`
 
 Fără build, fără dependențe: HTML, CSS și JavaScript modular. `index.html` e în rădăcină, deci merge direct pe GitHub Pages.
 
-## Ce conține
+## Aplicația clienților
 
-- **Splash animat**: logo-ul vectorizat se desenează linie cu linie, foarfeca din „A” taie (tap pe logo repetă gestul), iar bara de încărcare în roșu, alb și albastru urmărește încărcarea reală.
-- **Bara de jos flotantă**, cu pastilă care alunecă între taburi (se poate și glisa cu degetul): Acasă, Programează, Agenda, Despre salon.
-- **Programare în 4 pași**: serviciu, frizer (sau primul disponibil), dată și oră, detalii. Bilet de confirmare cu cod.
-- **Reamintiri cu o zi înainte**:
-  1. eveniment în calendarul telefonului (.ics) cu alarmă cu o zi și cu 2 ore înainte, sau Google Calendar;
-  2. notificare pe telefon prin service worker (Android, desktop, iPhone cu aplicația adăugată pe ecranul principal);
-  3. email automat, după activarea serverului gratuit din `backend/` (Google Apps Script).
-- **Agenda**: programări viitoare cu numărătoare inversă, mutare, anulare, istoric și „programează din nou”.
-- **Despre salon**: carusel cu 20 de fotografii din social media (swipe cu parallax), lightbox pe tot ecranul (swipe stânga/dreapta, swipe în jos pentru închidere), galerie, echipă, program, hartă, contact.
-- Funcționează offline după prima vizită și se poate instala pe ecranul principal.
+- Splash animat cu logo-ul vectorizat și bara de încărcare în roșu, alb și albastru.
+- Bara de jos cu 4 taburi: Acasă, Programează, Agenda, Despre salon.
+- Programare în 4 pași: serviciu, frizer (sau primul disponibil), dată și oră, detalii. Orele libere vin din programul setat de fiecare frizer în panou.
+- Reamintiri: calendar (.ics), notificare pe telefon și SMS de la frizer.
+- Despre salon: carusel și galerie cu 20 de fotografii din social media.
+
+## Panoul frizerilor (`/admin/`)
+
+Conturi de test (schimbă parolele din panou, la Contul meu):
+
+| Utilizator | Parolă | Frizer |
+|---|---|---|
+| user0 | ParolaTest0 | Adiță |
+| user1 | ParolaTest1 | Radu |
+| user2 | ParolaTest2 | Ștefan |
+
+- **Agenda**: programările pe zi și pe frizer, încasarea zilei, programare nouă (primită la telefon), anulare.
+- **SMS-uri de trimis**: confirmările și reminderele care trebuie trimise. Un tap deschide Mesaje cu textul gata scris, de pe telefonul frizerului.
+- **Istoric**: toate programările, pe frizer, cu filtre pe perioadă, interval orar, zilele săptămânii, status și căutare după nume, telefon sau cod. Export CSV.
+- **Program**: orele de lucru pe fiecare zi, pauză, zile libere și program special pe date. Clienții văd doar aceste ore.
+- **Echipa**: adaugă, editează sau scoate frizeri. Fiecare frizer e și cont de acces, cu numărul lui de telefon pentru SMS.
+
+### Mod demo și mod server
+
+- **Demo (acum)**: fără server, datele stau în browserul telefonului. Panoul vede programările făcute din aplicație pe același telefon. Bun pentru prezentare.
+- **Server (recomandat)**: Google Apps Script gratuit, comun pentru toți frizerii, cu autentificare pe server și SMS automat prin httpSMS (telefon Android). Instalare în [backend/README.md](backend/README.md).
 
 ## Structură
 
 ```
-index.html              punctul de intrare
-manifest.webmanifest    instalare ca aplicație
+index.html              aplicația clienților
+admin/index.html        panoul frizerilor
 sw.js                   offline + reamintiri în fundal
 assets/css/app.css      design system
-assets/js/data.js       TOT conținutul salonului: servicii, prețuri, program, echipă, poze
-assets/js/app.js        tab bar, rute, pornire
-assets/js/views/        ecranele: home, booking, agenda, about
-assets/js/reminders.js  calendar, notificări, server
-assets/img/             fotografii, echipă, imagine pentru share
-backend/                server opțional pentru emailuri (Google Apps Script)
+assets/css/admin.css    completări pentru panou
+assets/js/data.js       conținutul salonului: servicii, prețuri, program, echipă, poze, CONFIG
+assets/js/api.js        stratul de date: mod local (demo) sau server
+assets/js/slots.js      orele libere din programul frizerilor
+assets/js/sms.js        textele SMS și trimiterea cu un tap
+assets/js/views/        ecranele aplicației
+assets/js/admin/        ecranele panoului
+backend/                serverul (Google Apps Script) + SMS prin httpSMS
 ```
-
-## Editare rapidă
-
-Totul se schimbă din `assets/js/data.js`:
-
-- **Servicii și prețuri**: lista `SERVICES` (preluate de pe profilul mero al salonului).
-- **Program**: `SALON.hours`.
-- **Echipa**: `BARBERS`. Pe mero apare doar Adiță; **Radu și Ștefan sunt profiluri exemplu** (`placeholder: true`) și trebuie înlocuite cu frizerii reali. Pentru poză, pune fișierul în `assets/img/team/` și completează `photo`.
-- **Galerie**: `PHOTOS` și fișierele din `assets/img/gallery/`.
 
 După modificări, crește `VERSION` din `sw.js`, ca telefoanele să descarce varianta nouă.
 
 ## Rulare locală
-
-Orice server static, din rădăcina proiectului:
 
 ```bash
 npx serve .

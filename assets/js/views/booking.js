@@ -1,10 +1,11 @@
 /* Fluxul de programare: serviciu → frizer → dată și oră → detalii → confirmare. */
-import { SERVICES, SERVICE_GROUPS, BARBERS, ACADEMY } from '../data.js';
+import { SERVICES, SERVICE_GROUPS, ACADEMY } from '../data.js';
 import { icon } from '../icons.js';
 import { esc, fmt, bus, haptic, toast, showCTA, hideCTA, setNavHidden, pushStep, unwind, fadeImages, $ } from '../lib.js';
 import { Bookings, Profile, newCode } from '../store.js';
-import { freeSlots, nextAvailable, bookingDays, hoursFor, loadRemote, remoteReady, toMin, toTime } from '../slots.js';
-import { planReminder, reminderText, notifState, enableNotifications, onBooked, onCancelled, api, hasServer, whatsappUrl } from '../reminders.js';
+import { Api, isRemote } from '../api.js';
+import { freeSlots, nextAvailable, bookingDays, worksOn, toMin, toTime } from '../slots.js';
+import { planReminder, reminderText, notifState, enableNotifications, onBooked, onCancelled, hasServer, whatsappUrl } from '../reminders.js';
 import { avatar, barberById, serviceById, academySheet, calendarSheet, notifSheet, privacySheet } from '../components.js';
 
 const STEPS = [
@@ -54,9 +55,15 @@ export function initBooking(root) {
   });
   bus.on('bookings', () => { if (active && mode === 'success') render(); });
   bus.on('notif', () => { if (active && mode === 'success') render(); });
+  bus.on('team', () => { if (active && mode === 'flow') render(); });
 }
 
-export function onShow() { active = true; render(); }
+export function onShow() {
+  active = true;
+  render();
+  // orele ocupate se reîmprospătează de pe server la fiecare intrare în flux
+  if (isRemote()) Api.refresh().then(() => { if (active && mode === 'flow' && state.step >= 1) render(); });
+}
 export function onHide() { active = false; hideCTA(); }
 export function handleBack() {
   if (!active || mode !== 'flow' || state.step === 0) return false;
@@ -154,7 +161,7 @@ function stepBarber() {
         </span>
         <span class="opt__check">${icon('check')}</span>
       </button>
-      ${BARBERS.map((b) => `
+      ${Api.barbers().map((b) => `
         <button class="opt" type="button" role="radio" aria-checked="${state.barberId === b.id}" data-pick-barber="${b.id}">
           ${avatar(b)}
           <span class="opt__main">
@@ -168,7 +175,7 @@ function stepBarber() {
 }
 
 function dayInfo(d, dur) {
-  if (!hoursFor(d)) return { closed: true, n: 0 };
+  if (!worksOn(d, state.barberId)) return { closed: true, n: 0 };
   return { closed: false, n: freeSlots(d, state.barberId, dur, { ignoreId: state.rescheduleId }).length };
 }
 
@@ -192,8 +199,8 @@ function stepTime() {
         const rel = fmt.relDay(d);
         const dow = rel === 'Azi' || rel === 'Mâine' ? rel : fmt.dowShort(d);
         const cls = info.closed ? 'is-closed' : info.n === 0 ? 'is-full' : '';
-        const tag = info.closed ? 'ÎNCHIS' : info.n === 0 ? '' : `<i class="${info.n <= 5 ? 'few' : ''}"></i>`;
-        return `<button class="date ${cls}" type="button" role="tab" aria-selected="${iso === state.date}" data-pick-date="${iso}" data-month-label="${fmt.month(d)} ${d.getFullYear()}" ${info.closed ? 'aria-disabled="true"' : ''} aria-label="${fmt.dayLong(d)}${info.closed ? ', închis' : ''}">
+        const tag = info.closed ? (state.barberId && state.barberId !== 'any' ? 'LIBER' : 'ÎNCHIS') : info.n === 0 ? '' : `<i class="${info.n <= 5 ? 'few' : ''}"></i>`;
+        return `<button class="date ${cls}" type="button" role="tab" aria-selected="${iso === state.date}" data-pick-date="${iso}" data-month-label="${fmt.month(d)} ${d.getFullYear()}" ${info.closed ? 'aria-disabled="true"' : ''} aria-label="${fmt.dayLong(d)}${info.closed ? ', nu se lucrează' : ''}">
           <span class="date__dow">${dow}</span><span class="date__num">${d.getDate()}</span><span class="date__tag">${tag}</span>
         </button>`;
       }).join('')}
@@ -204,11 +211,9 @@ function stepTime() {
 function slotsHTML() {
   const svc = serviceById(state.serviceId);
   const d = fmt.date(state.date);
-  if (!hoursFor(d)) {
-    return emptyHTML('Salonul e închis în această zi', 'Lunea și duminica nu lucrăm. Alege altă zi din calendar.');
-  }
-  if (!remoteReady(state.date)) {
-    return `<div class="slot-group"><div class="slots is-loading">${'<span class="slot">00:00</span>'.repeat(8)}</div></div>`;
+  if (!worksOn(d, state.barberId)) {
+    const one = state.barberId && state.barberId !== 'any' ? barberById(state.barberId) : null;
+    return emptyHTML(one ? `${esc(one.short)} nu lucrează în această zi` : 'Salonul e închis în această zi', 'Alege altă zi din calendar.');
   }
   const slots = freeSlots(d, state.barberId, svc.duration, { ignoreId: state.rescheduleId });
   if (!slots.length) {
@@ -246,7 +251,6 @@ function afterTimeRender() {
       if (b && month.textContent !== b.dataset.monthLabel) month.textContent = b.dataset.monthLabel;
     });
   }, { passive: true });
-  if (!remoteReady(state.date)) loadRemote(state.date).then(() => refreshSlots());
 }
 
 function refreshSlots() {
@@ -342,14 +346,13 @@ function onClick(e) {
     return;
   }
   if (t.dataset.pickDate) {
-    if (t.getAttribute('aria-disabled') === 'true') { haptic(); toast('Salonul e închis în această zi', { ic: 'info' }); return; }
+    if (t.getAttribute('aria-disabled') === 'true') { haptic(); toast('Nu se lucrează în această zi', { ic: 'info' }); return; }
     haptic('select');
     state.date = t.dataset.pickDate;
     state.time = null;
     el.querySelectorAll('[data-dates] [data-pick-date]').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.pickDate === state.date)));
     const selBtn = el.querySelector(`[data-dates] [data-pick-date="${state.date}"]`);
     selBtn?.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
-    if (!remoteReady(state.date)) loadRemote(state.date).then(() => refreshSlots());
     refreshSlots();
     updateCTA();
     return;
@@ -451,17 +454,31 @@ async function confirm() {
   btn.innerHTML = 'Se trimite';
 
   Profile.set({ name: b.name, phone: b.phone, email: b.email });
-  if (state.rescheduleId) {
-    const old = Bookings.update(state.rescheduleId, { status: 'rescheduled', replacedBy: b.id });
-    if (old) { api('cancel', { id: old.id, reason: 'reprogramare' }); onCancelled(old); }
+  const res = await Api.book(b);
+  if (!res.ok) {
+    btn.disabled = false;
+    btn.innerHTML = 'Confirmă';
+    haptic('heavy');
+    if (res.error === 'network') {
+      toast('Nu am putut trimite programarea. Verifică internetul.', { ic: 'info', tone: 'red' });
+      return;
+    }
+    toast('Ora aleasă tocmai s-a ocupat. Alege alta.', { ic: 'clock', tone: 'red' });
+    await Api.refresh();
+    state.time = null;
+    state.step = 2;
+    render('back');
+    return;
   }
-  Bookings.add(b);
-  api('book', { booking: b });
+  if (state.rescheduleId) {
+    const prev = Bookings.get(state.rescheduleId);
+    if (prev) { const old = await Api.cancel(prev, 'reprogramare'); Bookings.update(prev.id, { replacedBy: b.id }); onCancelled(old); }
+  }
   if (notifAsk) await notifAsk;
-  await onBooked(b);
+  await onBooked(res.booking);
 
   haptic('success');
-  last = b;
+  last = res.booking;
   mode = 'success';
   if (depth) { unwind(depth); depth = 0; }
   hideCTA();
@@ -517,6 +534,8 @@ function renderSuccess() {
       <ul class="remcard__list">
         ${b.remind && b.reminder ? `<li class="${ns === 'granted' ? 'on' : ''}">${icon(ns === 'granted' ? 'check' : 'smartphone')}<span>Notificare pe telefon</span>${ns === 'granted' ? '' : `<button class="btn btn--xs btn--secondary act" type="button" data-act="notif">Activează</button>`}</li>` : ''}
         <li class="${b.calendar ? 'on' : ''}">${icon(b.calendar ? 'check' : 'calendar')}<span>Alarmă în calendar</span>${b.calendar ? '' : `<button class="btn btn--xs btn--secondary act" type="button" data-act="calendar">Adaugă</button>`}</li>
+        <li class="on">${icon('check')}<span>${b.sms?.confirm?.status === 'sent' ? 'SMS de confirmare trimis' : 'SMS de confirmare de la frizer'}</span></li>
+        ${b.remind && b.reminder ? `<li class="on">${icon('check')}<span>SMS ${b.reminder.kind === 'day' ? 'cu o zi' : 'cu 2 ore'} înainte, de la ${esc(b.barberShort)}</span></li>` : ''}
         ${hasServer() && b.email ? `<li class="on">${icon('check')}<span>Email la ${esc(b.email)}</span></li>` : ''}
       </ul>
     </div>

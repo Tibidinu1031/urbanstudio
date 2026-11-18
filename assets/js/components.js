@@ -1,11 +1,12 @@
 /* Piese de UI reutilizate și sheet-urile aplicației. */
-import { SALON, BARBERS, SERVICES, ACADEMY } from './data.js';
+import { SALON, SERVICES, ACADEMY } from './data.js';
+import { Api } from './api.js';
 import { icon } from './icons.js';
 import { esc, fmt, openSheet, bus, haptic, isIOS } from './lib.js';
 import { hoursFor, toTime } from './slots.js';
 import { mapsLinks, downloadICS, googleCalUrl, notifState, enableNotifications, hasServer } from './reminders.js';
 
-export const barberById = (id) => BARBERS.find((b) => b.id === id);
+export const barberById = (id) => Api.barber(id);
 export const serviceById = (id) => SERVICES.find((s) => s.id === id);
 
 export function avatar(b, cls = '') {

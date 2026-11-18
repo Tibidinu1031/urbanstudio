@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="ro">
+<head>
+  <meta charset="utf-8">
+  <base href="../">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Urban Studio · Panou frizeri</title>
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="theme-color" content="#0E0F11">
+  <meta name="color-scheme" content="dark">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="US Frizeri">
+  <meta name="format-detection" content="telephone=no">
+  <link rel="manifest" href="admin/manifest.webmanifest">
+  <link rel="icon" type="image/png" href="assets/icons/favicon-64.png">
+  <link rel="apple-touch-icon" href="assets/icons/apple-touch-icon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Urbanist:wght@400;500;600;700;800;900&display=swap" media="print" onload="this.media='all'">
+  <link rel="stylesheet" href="assets/css/app.css">
+  <link rel="stylesheet" href="assets/css/admin.css">
+  <script type="module" src="assets/js/admin/main.js"></script>
+</head>
+<body class="booting admin">
+
+  <div class="login" id="login" hidden></div>
+
+  <div class="app" id="app" hidden>
+    <main>
+      <section class="view" id="view-agenda" data-view="agenda" aria-label="Agenda"></section>
+      <section class="view" id="view-history" data-view="history" aria-label="Istoric" hidden></section>
+      <section class="view" id="view-schedule" data-view="schedule" aria-label="Program" hidden></section>
+      <section class="view" id="view-team" data-view="team" aria-label="Echipa" hidden></section>
+    </main>
+
+    <div class="dock" id="dock" aria-hidden="true"></div>
+    <div class="cta" id="cta" aria-hidden="true">
+      <div class="cta__sum"><b id="cta-title"></b><small id="cta-sub"></small></div>
+      <button class="btn btn--primary" id="cta-btn" type="button"></button>
+    </div>
+
+    <nav class="tabbar" id="tabbar" aria-label="Navigare panou">
+      <div class="tabbar__glass" id="tabbar-glass">
+        <span class="tabbar__pill" id="tabbar-pill" aria-hidden="true"></span>
+        <button class="tab" type="button" data-tab="agenda" aria-label="Agenda"></button>
+        <button class="tab" type="button" data-tab="history" aria-label="Istoric"></button>
+        <button class="tab" type="button" data-tab="schedule" aria-label="Program"></button>
+        <button class="tab" type="button" data-tab="team" aria-label="Echipa"></button>
+      </div>
+    </nav>
+  </div>
+
+  <div id="sheet-host"></div>
+  <div id="toast-host" aria-live="polite" aria-atomic="true"></div>
+  <label class="haptic" id="haptic" aria-hidden="true"><input type="checkbox" switch tabindex="-1"></label>
+</body>
+</html>

@@ -54,6 +54,24 @@ const P = {
   download: '<path d="M12 4v11M7.25 10.5 12 15.25l4.75-4.75M5 19.75h14"/>',
   smartphone: '<rect x="6.25" y="2.75" width="11.5" height="18.5" rx="2.75"/><path d="M10.5 18h3"/>',
   globe: '<circle cx="12" cy="12" r="8.25"/><path d="M3.75 12h16.5M12 3.75c2.3 2.4 3.4 5.15 3.4 8.25s-1.1 5.85-3.4 8.25M12 3.75C9.7 6.15 8.6 8.9 8.6 12s1.1 5.85 3.4 8.25"/>',
+
+  /* panoul frizerilor */
+  calendarFill: '<path fill="currentColor" stroke="none" d="M8 2a.75.75 0 0 1 .75.75V4h6.5V2.75a.75.75 0 0 1 1.5 0V4h.25A3.5 3.5 0 0 1 20.5 7.5V8.5h-17v-1A3.5 3.5 0 0 1 7 4h.25V2.75A.75.75 0 0 1 8 2zM3.5 10h17v6.75a3.5 3.5 0 0 1-3.5 3.5H7a3.5 3.5 0 0 1-3.5-3.5z"/>',
+  list: '<path d="M9 6.5h10.5M9 12h10.5M9 17.5h10.5"/><circle cx="5" cy="6.5" r="1.15" fill="currentColor" stroke="none"/><circle cx="5" cy="12" r="1.15" fill="currentColor" stroke="none"/><circle cx="5" cy="17.5" r="1.15" fill="currentColor" stroke="none"/>',
+  listFill: '<path stroke-width="2.6" d="M9 6.5h10.5M9 12h10.5M9 17.5h10.5"/><circle cx="5" cy="6.5" r="1.6" fill="currentColor" stroke="none"/><circle cx="5" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="5" cy="17.5" r="1.6" fill="currentColor" stroke="none"/>',
+  clockFill: '<path fill="currentColor" stroke="none" fill-rule="evenodd" d="M12 3a9 9 0 1 1 0 18 9 9 0 0 1 0-18zm.85 4.5a.85.85 0 0 0-1.7 0V12c0 .3.15.57.4.72l2.75 1.75a.85.85 0 1 0 .9-1.44l-2.35-1.5z"/>',
+  usersFill: '<circle cx="9" cy="8.25" r="3.6" fill="currentColor" stroke="none"/><path fill="currentColor" stroke="none" d="M2.75 19.4v-.4a6.25 6.25 0 0 1 12.5 0v.4a1 1 0 0 1-1 1H3.75a1 1 0 0 1-1-1z"/><path d="M15.25 5.4a3.3 3.3 0 0 1 0 5.9M17.6 13.4a5.6 5.6 0 0 1 3.15 5v.9"/>',
+  message: '<path d="M7 4.75h10A2.25 2.25 0 0 1 19.25 7v7A2.25 2.25 0 0 1 17 16.25h-6.5l-4.75 3.5v-3.5A2.25 2.25 0 0 1 4.75 14V7A2.25 2.25 0 0 1 7 4.75z"/><path d="M8.5 9h7M8.5 12h4.5"/>',
+  send: '<path d="M20.25 3.75 10.5 13.5M20.25 3.75 14 20.25l-3.5-6.75-6.75-3.5z"/>',
+  search: '<circle cx="10.75" cy="10.75" r="6.25"/><path d="m15.5 15.5 4.25 4.25"/>',
+  filter: '<path d="M4 6.5h16M7 12h10M10 17.5h4"/>',
+  eye: '<path d="M2.75 12S6 5.75 12 5.75 21.25 12 21.25 12 18 18.25 12 18.25 2.75 12 2.75 12z"/><circle cx="12" cy="12" r="3"/>',
+  eyeOff: '<path d="M4 4l16 16M9.9 6.05A9.9 9.9 0 0 1 12 5.75C18 5.75 21.25 12 21.25 12a16 16 0 0 1-2.6 3.4M6.6 7.55C4.1 9.2 2.75 12 2.75 12S6 18.25 12 18.25c1.6 0 3-.45 4.2-1.1"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/>',
+  lock: '<rect x="5" y="10.5" width="14" height="9.75" rx="2.5"/><path d="M8.25 10.5V7.75a3.75 3.75 0 0 1 7.5 0v2.75M12 14.25v2.25"/>',
+  logout: '<path d="M14 4.75H7a2 2 0 0 0-2 2v10.5a2 2 0 0 0 2 2h7M10.5 12h9.75M17 8.5l3.5 3.5-3.5 3.5"/>',
+  userPlus: '<circle cx="10" cy="8.25" r="3.75"/><path d="M3.5 20.25v-.5a6.5 6.5 0 0 1 10.6-5M18.5 13.5v6M15.5 16.5h6"/>',
+  coffee: '<path d="M5 9.5h11v4.25a5 5 0 0 1-5 5h-1a5 5 0 0 1-5-5zM16 10.75h1.25a2.5 2.5 0 0 1 0 5H16M8.5 3.75v2.5M12 3.75v2.5"/>',
+  export: '<path d="M12 15V3.75M7.75 8 12 3.75 16.25 8M5 13.5v4.25a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V13.5"/>',
 };
 
 export function icon(name, cls = '') {

@@ -1,5 +1,6 @@
 /* Acasă: salut, căutare rapidă, următoarea programare, sugestii, echipă, recenzii, galerie, locație. */
-import { SALON, SERVICES, BARBERS, REVIEWS, PHOTOS, ACADEMY } from '../data.js';
+import { SALON, SERVICES, REVIEWS, PHOTOS, ACADEMY } from '../data.js';
+import { Api } from '../api.js';
 import { icon } from '../icons.js';
 import { esc, fmt, bus, haptic, fadeImages } from '../lib.js';
 import { Bookings, Profile } from '../store.js';
@@ -15,6 +16,7 @@ export function initHome(root) {
   el = root;
   render();
   bus.on('bookings', () => render());
+  bus.on('team', () => render());
   setInterval(() => { if (!el.hidden) refreshLive(); }, 30000);
   el.addEventListener('click', onClick);
 }
@@ -112,7 +114,7 @@ function render() {
     <section class="sec">
       <div class="sec__head"><div><h2 class="sec__title">Echipa</h2><p class="sec__sub">Alege-ți frizerul preferat</p></div></div>
       <div class="hscroll">
-        ${BARBERS.map((b) => `
+        ${Api.barbers().map((b) => `
           <button class="barber-card press" type="button" data-barber="${b.id}">
             <span class="barber-card__media">${avatar(b)}${b.rating ? `<span class="barber-card__badge chip chip--glass">${icon('star')} ${String(b.rating).replace('.', ',')}</span>` : ''}</span>
             <span class="barber-card__name">${esc(b.short)}</span>

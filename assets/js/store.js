@@ -16,13 +16,15 @@ export const Bookings = {
     this.save(l);
     return out;
   },
+  /* programările clientului de pe acest telefon (fără cele adăugate de frizer din panou, în modul demo) */
+  mine() { return this.list().filter((b) => b.source !== 'admin'); },
   upcoming(now = Date.now()) {
-    return this.list()
+    return this.mine()
       .filter((b) => b.status === 'confirmed' && b.endMs > now)
       .sort((a, b) => a.startMs - b.startMs);
   },
   past(now = Date.now()) {
-    return this.list()
+    return this.mine()
       .filter((b) => b.status !== 'confirmed' || b.endMs <= now)
       .sort((a, b) => b.startMs - a.startMs);
   },

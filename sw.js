@@ -1,5 +1,5 @@
 /* Service worker: funcționare offline + reamintiri în fundal. */
-const VERSION = 'us-2026-11-10-4';
+const VERSION = 'us-2026-11-18-1';
 const SHELL = [
   './',
   'index.html',
@@ -10,10 +10,22 @@ const SHELL = [
   'assets/js/data.js',
   'assets/js/icons.js',
   'assets/js/store.js',
+  'assets/js/api.js',
+  'assets/js/sms.js',
   'assets/js/logo.js',
   'assets/js/slots.js',
   'assets/js/reminders.js',
   'assets/js/components.js',
+  'admin/',
+  'admin/index.html',
+  'admin/manifest.webmanifest',
+  'assets/css/admin.css',
+  'assets/js/admin/main.js',
+  'assets/js/admin/shared.js',
+  'assets/js/admin/agenda.js',
+  'assets/js/admin/history.js',
+  'assets/js/admin/schedule.js',
+  'assets/js/admin/team.js',
   'assets/js/gallery.js',
   'assets/js/splash.js',
   'assets/js/views/home.js',

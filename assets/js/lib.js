@@ -94,6 +94,9 @@ export const fmt = {
     if (d.length === 10 && d.startsWith('0')) return `${d.slice(0, 4)} ${d.slice(4, 7)} ${d.slice(7)}`;
     return v;
   },
+  slug(s) {
+    return String(s || 'frizer').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'frizer';
+  },
   greeting(d = new Date()) {
     const h = d.getHours();
     if (h < 5) return 'Bună seara';
@@ -107,6 +110,7 @@ export const fmt = {
 // Android: Vibration API. iOS 18+: comutarea unui <input switch> nativ declanșează Taptic Engine.
 export function haptic(kind = 'light') {
   try {
+    if (navigator.userActivation && !navigator.userActivation.isActive) return;
     if (typeof navigator.vibrate === 'function' && !isIOS()) {
       navigator.vibrate(kind === 'success' ? [12, 60, 18] : kind === 'heavy' ? 22 : kind === 'select' ? 6 : 10);
       return;

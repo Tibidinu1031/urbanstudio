@@ -1,61 +1,92 @@
 /**
- * Urban Studio · server pentru programări și reamintiri pe email
- * Rulează gratuit în Google Apps Script, legat de un Google Sheet.
+ * Urban Studio · server pentru aplicație și panoul frizerilor (Google Apps Script, gratuit)
  *
- * Ce face:
- *  - primește programările din aplicație și le scrie în foaia „Programari”
- *  - trimite confirmare pe email clientului și o notificare salonului
- *  - verifică la 15 minute și trimite reamintirea cu o zi înainte
- *  - îi spune aplicației ce ore sunt ocupate (ca să nu existe suprapuneri)
+ *  - programările clienților, cu verificare că ora e liberă în programul frizerului
+ *  - panoul frizerilor: conturi (user0/1/2), echipă, program, istoric, anulări
+ *  - SMS în numele frizerului prin httpSMS (aplicația httpSMS pe telefonul Android cu acel număr):
+ *      1) confirmare imediat după programare
+ *      2) reminder cu o zi înainte (sau cu 2 ore, dacă programarea e făcută cu mai puțin de o zi înainte)
+ *  - fără cheie httpSMS, SMS-urile apar în panou la „SMS-uri de trimis” și se trimit cu un tap
  *
- * Instalare: vezi backend/README.md
+ * Instalare: backend/README.md
  */
 
-const SHEET_NAME = 'Programari';
-const SALON = {
-  name: 'Urban Studio',
-  email: 'urbanstudio115@gmail.com',
-  phone: '0736 570 863',
-  address: 'Str. Panduri nr. 2, Bl. 3A, Ap. 3, Parter, interfon 3, Ploiești',
-  maps: 'https://www.google.com/maps/dir/?api=1&destination=44.9385124,26.0075579',
+const CFG = {
+  salonName: 'Urban Studio',
+  salonEmail: 'urbanstudio115@gmail.com',
+  smsPhoneDefault: '0728933035',
+  tz: 'Europe/Bucharest',
+  slotStep: 15,
+  bookingDays: 35,
+  notifySalonByEmail: true,
 };
-const TZ = 'Europe/Bucharest';
-const REMIND_HOURS = 24;
-const HEAD = [
-  'id', 'status', 'createdAt', 'date', 'time', 'startMs', 'endMs',
-  'serviceId', 'serviceName', 'price', 'duration', 'barberId', 'barberName',
-  'name', 'phone', 'email', 'notes', 'remind', 'reminderSentAt',
-];
+const SH = { bookings: 'Programari', team: 'Frizeri', sms: 'SMS' };
+const B_HEAD = ['id', 'status', 'source', 'createdAt', 'date', 'time', 'startMs', 'endMs', 'serviceId', 'serviceName', 'price', 'duration',
+  'barberId', 'barberName', 'barberShort', 'anyBarber', 'name', 'phone', 'email', 'notes', 'remind', 'remindAt', 'remindKind',
+  'smsConfirm', 'smsConfirmAt', 'smsRemind', 'smsRemindAt', 'cancelledAt'];
+const T_HEAD = ['id', 'username', 'passHash', 'name', 'short', 'role', 'phone', 'bio', 'tags', 'photo', 'rating', 'reviews', 'active', 'schedule', 'createdAt'];
+const TEXT_COLS = { [SH.bookings]: ['date', 'time', 'phone'], [SH.team]: ['phone', 'username'] };
+const SALON_HOURS = { 0: [], 1: [], 2: [['08:30', '16:45']], 3: [['08:30', '16:45']], 4: [['08:30', '18:30']], 5: [['08:30', '19:00']], 6: [['10:00', '15:00']] };
 
-/* Rulează o singură dată din editor: creează foaia și declanșatorul pentru reamintiri. */
+/* ======================= instalare ======================= */
+// Rulează o singură dată din editor (butonul Run): creează foile, conturile de test și declanșatorul pentru remindere.
 function setup() {
-  sheet_();
-  ScriptApp.getProjectTriggers()
-    .filter((t) => t.getHandlerFunction() === 'sendReminders')
-    .forEach((t) => ScriptApp.deleteTrigger(t));
-  ScriptApp.newTrigger('sendReminders').timeBased().everyMinutes(15).create();
+  const props = PropertiesService.getScriptProperties();
+  if (!props.getProperty('SECRET')) props.setProperty('SECRET', Utilities.getUuid() + Utilities.getUuid());
+  sheet_(SH.bookings, B_HEAD);
+  sheet_(SH.sms, ['at', 'bookingId', 'kind', 'from', 'to', 'status', 'response']);
+  const team = sheet_(SH.team, T_HEAD);
+  if (team.getLastRow() < 2) seedTeam_();
+  ScriptApp.getProjectTriggers().filter((t) => t.getHandlerFunction() === 'sendReminders').forEach((t) => ScriptApp.deleteTrigger(t));
+  ScriptApp.newTrigger('sendReminders').timeBased().everyMinutes(10).create();
 }
 
-/* ---------- API ---------- */
+// Pune cheia httpSMS (din httpsms.com/settings) rulând această funcție după ce o completezi.
+function setHttpSmsKey() {
+  const KEY = 'LIPESTE_AICI_CHEIA_HTTPSMS';
+  PropertiesService.getScriptProperties().setProperty('HTTPSMS_KEY', KEY);
+}
+
+function seedTeam_() {
+  const sched = JSON.stringify({ week: SALON_HOURS, days: {} });
+  const phone = CFG.smsPhoneDefault;
+  const rows = [
+    ['adita', 'user0', 'e1039ce07ba7aa63f6ce29ef01cbf95b826637f175b52379af133a77cf026c10', 'Adiță Seceanu', 'Adiță', 'Master hairstylist · Fondator', phone,
+      '9 ani de experiență în tuns și 5 ani ca trainer acreditat. Formează frizeri noi la Urban Studio Academy.', 'Fade,Foarfecă,Barbă,Trainer', 'assets/img/team/adita.jpg', 4.99, 3142, true, sched, new Date()],
+    ['radu', 'user1', 'b1a24ee7b31c601ee2fca709774c28f3ea29a2a9e324c31e2d3c8ed7223d6439', 'Radu', 'Radu', 'Barber', phone,
+      'Fade-uri curate, texturi și tunsori moderne.', 'Fade,Texturi', '', '', '', true, sched, new Date()],
+    ['stefan', 'user2', 'cf34e64cf414618620b7aaa97358cf307a05e0786952922c455cd728816d0f4f', 'Ștefan', 'Ștefan', 'Barber', phone,
+      'Barbă, contururi precise și tunsori clasice.', 'Barbă,Clasic', '', '', '', true, sched, new Date()],
+  ];
+  const sh = sheet_(SH.team, T_HEAD);
+  sh.getRange(2, 1, rows.length, T_HEAD.length).setValues(rows);
+}
+
+/* ======================= API ======================= */
 function doGet(e) {
   const p = (e && e.parameter) || {};
-  if (p.action === 'busy' && p.date) {
-    const busy = rows_()
-      .filter((r) => r.status === 'confirmed' && r.date === p.date)
-      .map((r) => ({ barberId: r.barberId, from: r.time, to: addMinutes_(r.time, Number(r.duration)) }));
-    return json_({ ok: true, busy: busy });
-  }
+  if (p.action === 'public') return json_(publicData_());
   return json_({ ok: true, service: 'urbanstudio' });
 }
 
 function doPost(e) {
   const lock = LockService.getScriptLock();
-  lock.waitLock(15000);
+  lock.waitLock(20000);
   try {
-    const data = JSON.parse(e.postData.contents);
-    if (data.action === 'book') return json_(book_(data.booking));
-    if (data.action === 'cancel') return json_(cancel_(data.id));
-    return json_({ ok: false, error: 'actiune necunoscuta' });
+    const d = JSON.parse(e.postData.contents || '{}');
+    switch (d.action) {
+      case 'book': return json_(publicBook_(d.booking));
+      case 'cancel': return json_(publicCancel_(d.id, d.phone));
+      case 'login': return json_(login_(d.username, d.password));
+      case 'admin': {
+        const userId = verify_(d.token);
+        if (!userId) return json_({ ok: false, error: 'auth' });
+        const me = team_().find((b) => b.id === userId && b.active);
+        if (!me) return json_({ ok: false, error: 'auth' });
+        return json_(admin_(me, d.op, d));
+      }
+      default: return json_({ ok: false, error: 'action' });
+    }
   } catch (err) {
     return json_({ ok: false, error: String(err) });
   } finally {
@@ -63,143 +94,336 @@ function doPost(e) {
   }
 }
 
-/* ---------- logică ---------- */
-function book_(b) {
-  if (!b || !b.id) return { ok: false, error: 'date lipsa' };
-  const all = rows_();
-  if (all.some((r) => r.id === b.id)) return { ok: true, duplicate: true };
+/* ---------- public ---------- */
+function publicData_() {
+  const today = Utilities.formatDate(new Date(), CFG.tz, 'yyyy-MM-dd');
+  const last = Utilities.formatDate(new Date(Date.now() + CFG.bookingDays * 864e5), CFG.tz, 'yyyy-MM-dd');
+  const busy = bookings_()
+    .filter((b) => b.status === 'confirmed' && b.date >= today && b.date <= last)
+    .map((b) => ({ barberId: b.barberId, date: b.date, from: b.time, to: addMin_(b.time, b.duration) }));
+  return { ok: true, barbers: team_().filter((b) => b.active).map(publicBarber_), busy: busy, sms: !!smsKey_() };
+}
 
-  const clash = all.some((r) => r.status === 'confirmed' && r.date === b.date && r.barberId === b.barberId &&
-    overlaps_(r.time, Number(r.duration), b.time, Number(b.duration)));
+function publicBook_(b) {
+  if (!b || !b.id || !b.barberId || !b.date || !b.time) return { ok: false, error: 'data' };
+  const all = bookings_();
+  if (all.some((x) => x.id === b.id)) return { ok: true, booking: toClient_(all.find((x) => x.id === b.id)) };
+  const barber = team_().find((x) => x.id === b.barberId && x.active);
+  if (!barber) return { ok: false, error: 'taken' };
+  if (!inSchedule_(barber, b) || clash_(all, b)) return { ok: false, error: 'taken' };
+  const row = insertBooking_(b, 'app', barber);
+  return { ok: true, booking: toClient_(row) };
+}
 
-  sheet_().appendRow(HEAD.map((k) => {
-    if (k === 'status') return clash ? 'conflict' : 'confirmed';
-    if (k === 'createdAt') return new Date();
-    if (k === 'reminderSentAt') return '';
-    return b[k] === undefined ? '' : b[k];
-  }));
-
-  if (clash) {
-    MailApp.sendEmail(SALON.email, `Suprapunere programare ${b.id}`,
-      `Ora ${b.time} din ${b.date} la ${b.barberName} era deja ocupată. Sună clientul: ${b.name}, ${b.phone}.`);
-    return { ok: false, error: 'ocupat' };
-  }
-
-  if (b.email) {
-    MailApp.sendEmail({
-      to: b.email,
-      name: SALON.name,
-      replyTo: SALON.email,
-      subject: `Programare confirmată · ${niceDate_(b)} la ${b.time}`,
-      htmlBody: emailHtml_('Ești programat', `Te așteptăm <b>${niceDate_(b)}</b>, la ora <b>${b.time}</b>.`, b),
-    });
-  }
-  MailApp.sendEmail({
-    to: SALON.email,
-    name: 'Aplicația Urban Studio',
-    subject: `Programare nouă: ${b.name} · ${b.date} ${b.time}`,
-    htmlBody: `<p><b>${esc_(b.serviceName)}</b> cu ${esc_(b.barberName)}<br>${niceDate_(b)}, ${b.time} (${b.duration} min)</p>
-      <p>${esc_(b.name)} · ${esc_(b.phone)}${b.email ? ' · ' + esc_(b.email) : ''}</p>
-      ${b.notes ? `<p>Mesaj: ${esc_(b.notes)}</p>` : ''}<p>Cod: ${b.id}</p>`,
-  });
+function publicCancel_(id, phone) {
+  const b = bookings_().find((x) => x.id === id);
+  if (!b) return { ok: false, error: 'notfound' };
+  if (digits_(b.phone).slice(-9) !== digits_(phone).slice(-9)) return { ok: false, error: 'auth' };
+  cancelRow_(b);
+  if (CFG.notifySalonByEmail) MailApp.sendEmail(CFG.salonEmail, `Programare anulată: ${b.name} · ${b.date} ${b.time}`, `Clientul a anulat din aplicație. Cod: ${b.id}, frizer: ${b.barberName}.`);
   return { ok: true };
 }
 
-function cancel_(id) {
-  const sh = sheet_();
-  const values = sh.getDataRange().getValues();
-  const col = HEAD.indexOf('status') + 1;
-  for (let i = 1; i < values.length; i++) {
-    if (values[i][0] === id) {
-      sh.getRange(i + 1, col).setValue('cancelled');
-      const r = toObj_(values[i]);
-      MailApp.sendEmail(SALON.email, `Programare anulată: ${r.name} · ${r.date} ${r.time}`, `Codul ${id} a fost anulat din aplicație.`);
+/* ---------- autentificare ---------- */
+function login_(username, password) {
+  const u = String(username || '').trim().toLowerCase();
+  const b = team_().find((x) => String(x.username).toLowerCase() === u && x.active);
+  if (!b || b.passHash !== sha256_('urbanstudio:' + password)) return { ok: false, error: 'credentials' };
+  const exp = Date.now() + 30 * 864e5;
+  const payload = `${b.id}|${exp}`;
+  return { ok: true, token: `${Utilities.base64EncodeWebSafe(payload)}.${sign_(payload)}`, exp: exp, user: adminBarber_(b) };
+}
+function verify_(token) {
+  try {
+    const parts = String(token || '').split('.');
+    const payload = Utilities.newBlob(Utilities.base64DecodeWebSafe(parts[0])).getDataAsString();
+    if (sign_(payload) !== parts[1]) return null;
+    const bits = payload.split('|');
+    return Number(bits[1]) > Date.now() ? bits[0] : null;
+  } catch (e) { return null; }
+}
+function sign_(s) {
+  const secret = PropertiesService.getScriptProperties().getProperty('SECRET');
+  return Utilities.base64EncodeWebSafe(Utilities.computeHmacSha256Signature(s, secret));
+}
+function sha256_(s) {
+  return Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, s, Utilities.Charset.UTF_8)
+    .map((b) => ((b + 256) % 256).toString(16).padStart(2, '0')).join('');
+}
+
+/* ---------- panou ---------- */
+function admin_(me, op, d) {
+  const team = team_();
+  switch (op) {
+    case 'me': return { ok: true, user: adminBarber_(me) };
+    case 'team': return { ok: true, team: team.map(adminBarber_) };
+
+    case 'bookings': {
+      let list = bookings_();
+      if (d.barberId) list = list.filter((b) => b.barberId === d.barberId);
+      if (d.from) list = list.filter((b) => b.date >= d.from);
+      if (d.to) list = list.filter((b) => b.date <= d.to);
+      return { ok: true, bookings: list.map(toClient_) };
+    }
+
+    case 'saveSchedule': {
+      const b = team.find((x) => x.id === d.id);
+      if (!b) return { ok: false, error: 'notfound' };
+      updateRow_(SH.team, T_HEAD, b._row, { schedule: JSON.stringify(d.schedule) });
       return { ok: true };
     }
-  }
-  return { ok: false, error: 'negasit' };
-}
 
-/* Rulat automat la 15 minute (vezi setup). */
-function sendReminders() {
-  const sh = sheet_();
-  const values = sh.getDataRange().getValues();
-  const now = Date.now();
-  const sentCol = HEAD.indexOf('reminderSentAt') + 1;
-  for (let i = 1; i < values.length; i++) {
-    const r = toObj_(values[i]);
-    if (r.status !== 'confirmed' || r.reminderSentAt || !r.email || String(r.remind) === 'false') continue;
-    const start = Number(r.startMs);
-    if (start > now && start - now <= REMIND_HOURS * 3600e3) {
-      MailApp.sendEmail({
-        to: r.email,
-        name: SALON.name,
-        replyTo: SALON.email,
-        subject: `Reamintire: mâine la ${r.time} ai programare la ${SALON.name}`,
-        htmlBody: emailHtml_('Ne vedem mâine', `Îți amintim de programarea de <b>${niceDate_(r)}</b>, ora <b>${r.time}</b>.`, r),
-      });
-      sh.getRange(i + 1, sentCol).setValue(new Date());
+    case 'saveBarber': {
+      const src = d.barber || {};
+      const uname = String(src.username || '').trim().toLowerCase();
+      if (!uname) return { ok: false, error: 'username' };
+      if (team.some((x) => String(x.username).toLowerCase() === uname && x.id !== src.id)) return { ok: false, error: 'username-taken' };
+      const patch = {
+        name: String(src.name || '').trim(), short: String(src.short || '').trim(), role: String(src.role || 'Barber').trim(),
+        phone: String(src.phone || '').trim(), username: uname, bio: String(src.bio || '').trim(),
+      };
+      if (d.password) patch.passHash = sha256_('urbanstudio:' + d.password);
+      const existing = src.id && team.find((x) => x.id === src.id);
+      if (existing) {
+        updateRow_(SH.team, T_HEAD, existing._row, patch);
+        return { ok: true, barber: adminBarber_(Object.assign(existing, patch)) };
+      }
+      if (!d.password) return { ok: false, error: 'password' };
+      const id = slug_(patch.short || patch.name) + '-' + Utilities.getUuid().slice(0, 4);
+      const row = Object.assign({ id: id, tags: '', photo: '', rating: '', reviews: '', active: true, schedule: JSON.stringify({ week: SALON_HOURS, days: {} }), createdAt: new Date() }, patch);
+      sheet_(SH.team, T_HEAD).appendRow(T_HEAD.map((k) => (row[k] === undefined ? '' : row[k])));
+      return { ok: true, barber: adminBarber_(normTeam_(row)) };
     }
+
+    case 'setActive': {
+      if (d.id === me.id && !d.active) return { ok: false, error: 'self' };
+      const b = team.find((x) => x.id === d.id);
+      if (!b) return { ok: false, error: 'notfound' };
+      if (!d.active && team.filter((x) => x.active).length <= 1) return { ok: false, error: 'last' };
+      updateRow_(SH.team, T_HEAD, b._row, { active: !!d.active });
+      return { ok: true };
+    }
+
+    case 'book': {
+      const b = d.booking || {};
+      const barber = team.find((x) => x.id === b.barberId);
+      if (!barber) return { ok: false, error: 'notfound' };
+      if (clash_(bookings_(), b)) return { ok: false, error: 'taken' };
+      const row = insertBooking_(b, 'admin', barber);
+      return { ok: true, booking: toClient_(row) };
+    }
+
+    case 'cancel': {
+      const b = bookings_().find((x) => x.id === d.id);
+      if (!b) return { ok: false, error: 'notfound' };
+      cancelRow_(b);
+      return { ok: true };
+    }
+
+    case 'markSms': {
+      const b = bookings_().find((x) => x.id === d.id);
+      if (!b) return { ok: false, error: 'notfound' };
+      const k = d.kind === 'confirm' ? 'Confirm' : 'Remind';
+      updateRow_(SH.bookings, B_HEAD, b._row, { ['sms' + k]: d.status, ['sms' + k + 'At']: Date.now() });
+      return { ok: true };
+    }
+
+    case 'resendSms': {
+      const b = bookings_().find((x) => x.id === d.id);
+      if (!b) return { ok: false, error: 'notfound' };
+      const status = sendSms_(b, d.kind);
+      if (status === 'manual') return { ok: false, error: 'manual' };
+      const k = d.kind === 'confirm' ? 'Confirm' : 'Remind';
+      updateRow_(SH.bookings, B_HEAD, b._row, { ['sms' + k]: status, ['sms' + k + 'At']: Date.now() });
+      return status === 'sent' ? { ok: true } : { ok: false, error: 'gateway' };
+    }
+
+    case 'password': {
+      if (me.passHash !== sha256_('urbanstudio:' + d.old)) return { ok: false, error: 'credentials' };
+      updateRow_(SH.team, T_HEAD, me._row, { passHash: sha256_('urbanstudio:' + d.next) });
+      return { ok: true };
+    }
+
+    default: return { ok: false, error: 'op' };
   }
 }
 
-/* ---------- utilitare ---------- */
-function sheet_() {
+/* ======================= programări ======================= */
+function insertBooking_(b, source, barber) {
+  const now = Date.now();
+  const startMs = Number(b.startMs);
+  let remindAt = '', remindKind = '';
+  if (b.remind !== false) {
+    if (startMs - now > 24 * 36e5 + 5 * 6e4) { remindAt = startMs - 24 * 36e5; remindKind = 'day'; }
+    else if (startMs - now > 2 * 36e5 + 5 * 6e4) { remindAt = startMs - 2 * 36e5; remindKind = 'hours'; }
+  }
+  const row = {
+    id: b.id, status: 'confirmed', source: source, createdAt: new Date(), date: b.date, time: b.time,
+    startMs: startMs, endMs: Number(b.endMs), serviceId: b.serviceId, serviceName: b.serviceName, price: Number(b.price), duration: Number(b.duration),
+    barberId: barber.id, barberName: barber.name, barberShort: barber.short, anyBarber: !!b.anyBarber,
+    name: b.name, phone: b.phone, email: b.email || '', notes: b.notes || '',
+    remind: b.remind !== false, remindAt: remindAt, remindKind: remindKind,
+    smsConfirm: b.sendConfirm === false ? 'skipped' : 'queued', smsConfirmAt: '',
+    smsRemind: remindAt ? 'scheduled' : 'skipped', smsRemindAt: '', cancelledAt: '',
+  };
+  sheet_(SH.bookings, B_HEAD).appendRow(B_HEAD.map((k) => (row[k] === undefined ? '' : row[k])));
+  row._row = sheet_(SH.bookings, B_HEAD).getLastRow();
+
+  if (row.smsConfirm === 'queued') {
+    row.smsConfirm = sendSms_(row, 'confirm');
+    row.smsConfirmAt = Date.now();
+    updateRow_(SH.bookings, B_HEAD, row._row, { smsConfirm: row.smsConfirm, smsConfirmAt: row.smsConfirmAt });
+  }
+  if (CFG.notifySalonByEmail && source === 'app') {
+    MailApp.sendEmail(CFG.salonEmail, `Programare nouă: ${row.name} · ${row.date} ${row.time}`,
+      `${row.serviceName} cu ${row.barberName}\n${row.date}, ora ${row.time} (${row.duration} min)\nClient: ${row.name}, ${row.phone}\n${row.notes ? 'Mesaj: ' + row.notes + '\n' : ''}Cod: ${row.id}`);
+  }
+  return row;
+}
+
+function cancelRow_(b) {
+  const patch = { status: 'cancelled', cancelledAt: Date.now() };
+  if (b.smsRemind === 'scheduled') patch.smsRemind = 'skipped';
+  updateRow_(SH.bookings, B_HEAD, b._row, patch);
+}
+
+// Rulat automat la 10 minute (vezi setup): trimite reminderele ajunse la termen.
+function sendReminders() {
+  const now = Date.now();
+  bookings_().forEach((b) => {
+    if (b.status !== 'confirmed' || b.smsRemind !== 'scheduled') return;
+    if (!b.remindAt || now < Number(b.remindAt) || Number(b.startMs) <= now) return;
+    const status = sendSms_(b, 'remind');
+    updateRow_(SH.bookings, B_HEAD, b._row, { smsRemind: status, smsRemindAt: now });
+  });
+}
+
+function inSchedule_(barber, b) {
+  const s = barber.schedule || { week: SALON_HOURS, days: {} };
+  const p = String(b.date).split('-').map(Number);
+  const dow = new Date(p[0], p[1] - 1, p[2]).getDay();
+  const list = s.days && Object.prototype.hasOwnProperty.call(s.days, b.date) ? s.days[b.date] : (s.week[dow] || []);
+  const start = toMin_(b.time), end = start + Number(b.duration);
+  return list.some((iv) => start >= toMin_(iv[0]) && end <= toMin_(iv[1]));
+}
+function clash_(all, b) {
+  const s = toMin_(b.time), e = s + Number(b.duration);
+  return all.some((x) => x.status === 'confirmed' && x.barberId === b.barberId && x.date === b.date && x.id !== b.id &&
+    s < toMin_(x.time) + Number(x.duration) && toMin_(x.time) < e);
+}
+
+/* ======================= SMS (httpSMS) ======================= */
+function smsKey_() { return PropertiesService.getScriptProperties().getProperty('HTTPSMS_KEY') || ''; }
+
+function sendSms_(b, kind) {
+  const key = smsKey_();
+  if (!key || key === 'LIPESTE_AICI_CHEIA_HTTPSMS') return 'manual';
+  const barber = team_().find((x) => x.id === b.barberId);
+  const fromPhone = (barber && barber.phone) || CFG.smsPhoneDefault;
+  const content = smsText_(b, kind, fromPhone);
+  const res = UrlFetchApp.fetch('https://api.httpsms.com/v1/messages/send', {
+    method: 'post',
+    contentType: 'application/json',
+    headers: { 'x-api-key': key },
+    payload: JSON.stringify({ from: intl_(fromPhone), to: intl_(b.phone), content: content }),
+    muteHttpExceptions: true,
+  });
+  const code = res.getResponseCode();
+  const status = code >= 200 && code < 300 ? 'sent' : 'failed';
+  sheet_(SH.sms, ['at', 'bookingId', 'kind', 'from', 'to', 'status', 'response'])
+    .appendRow([new Date(), b.id, kind, intl_(fromPhone), intl_(b.phone), status, String(res.getContentText()).slice(0, 300)]);
+  return status;
+}
+
+function smsText_(b, kind, barberPhone) {
+  const zile = ['duminica', 'luni', 'marti', 'miercuri', 'joi', 'vineri', 'sambata'];
+  const luni = ['ian.', 'feb.', 'mar.', 'apr.', 'mai', 'iun.', 'iul.', 'aug.', 'sept.', 'oct.', 'nov.', 'dec.'];
+  const p = String(b.date).split('-').map(Number);
+  const d = new Date(p[0], p[1] - 1, p[2]);
+  const day = `${zile[d.getDay()]}, ${d.getDate()} ${luni[d.getMonth()]}`;
+  const first = String(b.name || '').trim().split(/\s+/)[0];
+  const hi = first ? `Salut, ${first}!` : 'Salut!';
+  const phone = prettyPhone_(barberPhone);
+  let t;
+  if (kind === 'confirm') t = `${hi} Programare confirmata la Urban Studio: ${day}, ora ${b.time}, ${b.serviceName} cu ${b.barberShort}. Str. Panduri 2, Ploiesti. Modificari: ${phone}`;
+  else if (b.remindKind === 'hours') t = `${hi} Iti amintim: azi la ora ${b.time} ai programare la Urban Studio (${b.serviceName}, cu ${b.barberShort}). Te asteptam!`;
+  else t = `${hi} Iti amintim: maine, ${day}, la ora ${b.time} ai programare la Urban Studio (${b.serviceName}, cu ${b.barberShort}). Nu poti ajunge? Suna la ${phone}.`;
+  return t.normalize('NFD').replace(/[̀-ͯ]/g, '');
+}
+
+/* ======================= foi de calcul ======================= */
+function sheet_(name, head) {
   const ss = SpreadsheetApp.getActive();
-  let sh = ss.getSheetByName(SHEET_NAME);
+  let sh = ss.getSheetByName(name);
   if (!sh) {
-    sh = ss.insertSheet(SHEET_NAME);
-    sh.appendRow(HEAD);
+    sh = ss.insertSheet(name);
+    sh.appendRow(head);
     sh.setFrozenRows(1);
-    sh.getRange('D:E').setNumberFormat('@');
+    (TEXT_COLS[name] || []).forEach((k) => sh.getRange(1, head.indexOf(k) + 1, sh.getMaxRows(), 1).setNumberFormat('@'));
   }
   return sh;
 }
-function rows_() {
-  const values = sheet_().getDataRange().getValues();
-  return values.slice(1).map(toObj_);
-}
-function toObj_(row) {
-  const o = {};
-  HEAD.forEach((k, i) => {
-    let v = row[i];
-    if (v instanceof Date && (k === 'date')) v = Utilities.formatDate(v, TZ, 'yyyy-MM-dd');
-    if (v instanceof Date && (k === 'time')) v = Utilities.formatDate(v, TZ, 'HH:mm');
-    o[k] = v;
+function read_(name, head) {
+  const values = sheet_(name, head).getDataRange().getValues();
+  return values.slice(1).map((r, i) => {
+    const o = { _row: i + 2 };
+    head.forEach((k, j) => { o[k] = r[j]; });
+    return o;
   });
-  return o;
 }
-function toMin_(t) { const p = String(t).split(':'); return Number(p[0]) * 60 + Number(p[1]); }
-function addMinutes_(t, m) { const x = toMin_(t) + m; return `${String(Math.floor(x / 60)).padStart(2, '0')}:${String(x % 60).padStart(2, '0')}`; }
-function overlaps_(t1, d1, t2, d2) { const a = toMin_(t1), b = toMin_(t2); return a < b + d2 && b < a + d1; }
-function niceDate_(b) {
-  const zile = ['duminică', 'luni', 'marți', 'miercuri', 'joi', 'vineri', 'sâmbătă'];
-  const luni = ['ianuarie', 'februarie', 'martie', 'aprilie', 'mai', 'iunie', 'iulie', 'august', 'septembrie', 'octombrie', 'noiembrie', 'decembrie'];
-  const p = String(b.date).split('-').map(Number);
-  const d = new Date(p[0], p[1] - 1, p[2]);
-  return `${zile[d.getDay()]}, ${d.getDate()} ${luni[d.getMonth()]}`;
+function updateRow_(name, head, rowIndex, patch) {
+  const sh = sheet_(name, head);
+  Object.keys(patch).forEach((k) => {
+    const c = head.indexOf(k);
+    if (c >= 0) sh.getRange(rowIndex, c + 1).setValue(patch[k]);
+  });
 }
-function esc_(s) { return String(s || '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
-function json_(o) { return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON); }
 
-function emailHtml_(title, line, b) {
-  return `<div style="background:#0E0F11;padding:28px 16px;font-family:Helvetica,Arial,sans-serif;color:#F6F6F3">
-  <div style="max-width:460px;margin:0 auto;background:#1D1E22;border-radius:20px;overflow:hidden">
-    <div style="height:6px;background:repeating-linear-gradient(-45deg,#E5252A 0 7px,#F4F4F2 7px 14px,#2F62F5 14px 21px,#F4F4F2 21px 28px)"></div>
-    <div style="padding:26px 24px">
-      <div style="font-size:13px;letter-spacing:.2em;color:#8a8a8a;font-weight:700">URBAN STUDIO</div>
-      <h1 style="margin:10px 0 8px;font-size:26px;line-height:1.1">${title}</h1>
-      <p style="margin:0 0 18px;font-size:15px;line-height:1.5;color:#cfcfcb">${line}</p>
-      <table style="width:100%;font-size:14px;color:#F6F6F3;border-collapse:collapse">
-        <tr><td style="padding:6px 0;color:#8a8a8a">Serviciu</td><td style="text-align:right;font-weight:700">${esc_(b.serviceName)}</td></tr>
-        <tr><td style="padding:6px 0;color:#8a8a8a">Frizer</td><td style="text-align:right;font-weight:700">${esc_(b.barberName)}</td></tr>
-        <tr><td style="padding:6px 0;color:#8a8a8a">Preț</td><td style="text-align:right;font-weight:700">${b.price} lei, la salon</td></tr>
-        <tr><td style="padding:6px 0;color:#8a8a8a">Cod</td><td style="text-align:right;font-weight:700">${b.id}</td></tr>
-      </table>
-      <p style="margin:20px 0 0;font-size:14px;color:#cfcfcb">${SALON.address}</p>
-      <a href="${SALON.maps}" style="display:inline-block;margin-top:16px;background:#F6F6F3;color:#0B0B0C;text-decoration:none;font-weight:800;padding:12px 18px;border-radius:12px">Indicații</a>
-      <p style="margin:22px 0 0;font-size:13px;color:#8a8a8a">Nu mai poți ajunge? Anulează din aplicație sau sună la ${SALON.phone}.</p>
-    </div>
-  </div>
-</div>`;
+function bookings_() {
+  return read_(SH.bookings, B_HEAD).map((b) => {
+    if (b.date instanceof Date) b.date = Utilities.formatDate(b.date, CFG.tz, 'yyyy-MM-dd');
+    if (b.time instanceof Date) b.time = Utilities.formatDate(b.time, CFG.tz, 'HH:mm');
+    b.phone = String(b.phone);
+    b.duration = Number(b.duration);
+    return b;
+  }).filter((b) => b.id);
 }
+function team_() { return read_(SH.team, T_HEAD).filter((b) => b.id).map(normTeam_); }
+function normTeam_(b) {
+  b.active = b.active === true || String(b.active).toUpperCase() === 'TRUE';
+  b.phone = String(b.phone || '');
+  if (typeof b.schedule === 'string') { try { b.schedule = JSON.parse(b.schedule); } catch (e) { b.schedule = null; } }
+  if (!b.schedule) b.schedule = { week: SALON_HOURS, days: {} };
+  b.tags = typeof b.tags === 'string' ? b.tags.split(',').map((t) => t.trim()).filter(String) : (b.tags || []);
+  return b;
+}
+function publicBarber_(b) {
+  return { id: b.id, name: b.name, short: b.short, role: b.role, phone: b.phone, bio: b.bio, tags: b.tags, photo: b.photo || null,
+    rating: b.rating || undefined, reviews: b.reviews || undefined, active: b.active, schedule: b.schedule };
+}
+function adminBarber_(b) { return Object.assign(publicBarber_(b), { username: b.username }); }
+
+function toClient_(r) {
+  return {
+    id: r.id, status: r.status, source: r.source, createdAt: r.createdAt instanceof Date ? r.createdAt.getTime() : Number(r.createdAt) || null,
+    date: r.date, time: r.time, startMs: Number(r.startMs), endMs: Number(r.endMs),
+    serviceId: r.serviceId, serviceName: r.serviceName, price: Number(r.price), duration: Number(r.duration),
+    barberId: r.barberId, barberName: r.barberName, barberShort: r.barberShort, anyBarber: r.anyBarber === true || r.anyBarber === 'TRUE',
+    name: r.name, phone: String(r.phone), email: r.email, notes: r.notes,
+    remind: r.remind === true || r.remind === 'TRUE',
+    reminder: r.remindAt ? { at: Number(r.remindAt), kind: r.remindKind } : null,
+    sms: {
+      confirm: { status: r.smsConfirm || 'manual', at: Number(r.smsConfirmAt) || null },
+      remind: { status: r.smsRemind || 'skipped', at: Number(r.smsRemindAt) || Number(r.remindAt) || null, kind: r.remindKind },
+    },
+  };
+}
+
+/* ======================= utilitare ======================= */
+function json_(o) { return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON); }
+function toMin_(t) { const p = String(t).split(':'); return Number(p[0]) * 60 + Number(p[1]); }
+function addMin_(t, m) { const x = toMin_(t) + Number(m); return `${String(Math.floor(x / 60)).padStart(2, '0')}:${String(x % 60).padStart(2, '0')}`; }
+function digits_(s) { return String(s || '').replace(/\D/g, ''); }
+function intl_(p) { const d = digits_(p); return d.startsWith('40') ? '+' + d : d.startsWith('0') ? '+4' + d : '+' + d; }
+function prettyPhone_(p) { const d = digits_(p); return d.length === 10 ? `${d.slice(0, 4)} ${d.slice(4, 7)} ${d.slice(7)}` : p; }
+function slug_(s) { return String(s || 'frizer').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'frizer'; }

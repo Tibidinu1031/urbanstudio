@@ -1,7 +1,8 @@
 /* Despre salon: carusel cu 20 de fotografii, poveste, cifre, galerie, echipă, program, contact. */
-import { SALON, PHOTOS, BARBERS, ACADEMY } from '../data.js';
+import { SALON, PHOTOS, ACADEMY } from '../data.js';
+import { Api } from '../api.js';
 import { icon } from '../icons.js';
-import { esc, haptic, fadeImages } from '../lib.js';
+import { esc, haptic, fadeImages, bus } from '../lib.js';
 import { scissorsMark } from '../logo.js';
 import { avatar, barberSheet, hoursTable, directionsSheet, academySheet, mapHTML } from '../components.js';
 import { carouselHTML, initCarousel, gridHTML, openLightbox } from '../gallery.js';
@@ -12,6 +13,7 @@ let built = false;
 export function initAbout(root) {
   el = root;
   el.addEventListener('click', onClick);
+  bus.on('team', () => { built = false; if (!el.hidden) onShow(); });
 }
 
 export function onShow() {
@@ -54,7 +56,7 @@ function render() {
       <section class="sec">
         <div class="sec__head"><h2 class="sec__title">Echipa</h2></div>
         <div class="team-list">
-          ${BARBERS.map((b) => `
+          ${Api.barbers().map((b) => `
             <button class="team-row press" type="button" data-barber="${b.id}">
               ${avatar(b, 'avatar--lg')}
               <span class="grow"><b>${esc(b.name)}</b><small>${esc(b.role)}</small></span>
@@ -102,7 +104,7 @@ function render() {
         </div>
       </section>
 
-      <footer class="footer"><span>© ${new Date().getFullYear()} ${esc(SALON.fullName)}</span><span>Fotografii: Instagram, Facebook, mero</span></footer>
+      <footer class="footer"><span>© ${new Date().getFullYear()} ${esc(SALON.fullName)}</span><a href="admin/">Acces frizeri ${icon('chevR', 'i--xs')}</a></footer>
     </div>`;
   initCarousel(el, PHOTOS);
   fadeImages(el);

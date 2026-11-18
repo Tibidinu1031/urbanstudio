@@ -8,6 +8,7 @@ export const CONFIG = {
   minLeadMinutes: 30,      // cât de devreme se poate face o programare pentru azi
   bookingDays: 28,         // câte zile în avans se poate rezerva
   reminderHours: 24,       // reamintirea principală: cu o zi înainte
+  smsPhone: '0728933035',  // numărul de pe care pleacă SMS-urile (implicit pentru toți frizerii)
 };
 
 export const SALON = {

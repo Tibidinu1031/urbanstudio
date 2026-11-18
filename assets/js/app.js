@@ -3,6 +3,7 @@ import { PHOTOS } from './data.js';
 import { icon } from './icons.js';
 import { $, $$, bus, haptic, setNavHidden, hideCTA, onBack, onVisible, reduceMotion } from './lib.js';
 import { Bookings } from './store.js';
+import { Api, isRemote } from './api.js';
 import { runSplash } from './splash.js';
 import { checkDue, syncWorker } from './reminders.js';
 import { initHome } from './views/home.js';
@@ -118,10 +119,13 @@ function go(id, { instant = false } = {}) {
   if (current) {
     scrollPos[current] = window.scrollY;
     HOOKS[current].hide?.();
-    const prev = $(`#view-${current}`);
-    prev.hidden = true;
-    prev.classList.remove('is-active', 'is-entering');
   }
+  // ascunde toate celelalte ecrane (și la prima pornire, când se intră direct pe alt tab)
+  $$('main .view').forEach((v) => {
+    if (v.id === `view-${t.id}`) return;
+    v.hidden = true;
+    v.classList.remove('is-active', 'is-entering');
+  });
   hideCTA();
   const view = $(`#view-${t.id}`);
   view.hidden = false;
@@ -158,10 +162,12 @@ addEventListener('resize', () => movePill(TABS.findIndex((t) => t.id === current
 addEventListener('hashchange', () => go(fromHash()));
 
 /* ---------- pornire ---------- */
-function boot() {
+async function boot() {
   if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
   window.scrollTo(0, 0);
   buildTabs();
+  // frizerii, programul lor și orele ocupate se încarcă în timpul splash-ului
+  await Api.init().catch(() => {});
   initHome($('#view-home'));
   initBooking($('#view-book'));
   initAgenda($('#view-agenda'));
@@ -182,7 +188,9 @@ function boot() {
     checkDue();
   });
 
-  onVisible(() => checkDue());
+  onVisible(() => { checkDue(); if (isRemote()) Api.refresh().then(() => bus.emit('team')); });
+  // echipa sau programul modificate din panou (în alt tab, în modul local)
+  addEventListener('storage', (e) => { if (e.key && /\.(team|bookings)$/.test(e.key)) { bus.emit('team'); updateBadge(); } });
 
   if ('serviceWorker' in navigator) {
     const register = () => navigator.serviceWorker.register('sw.js').then(() => syncWorker()).catch(() => {});
