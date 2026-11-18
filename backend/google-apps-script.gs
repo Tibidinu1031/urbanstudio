@@ -195,7 +195,7 @@ function admin_(me, op, d) {
       if (!d.password) return { ok: false, error: 'password' };
       const id = slug_(patch.short || patch.name) + '-' + Utilities.getUuid().slice(0, 4);
       const row = Object.assign({ id: id, tags: '', photo: '', rating: '', reviews: '', active: true, schedule: JSON.stringify({ week: SALON_HOURS, days: {} }), createdAt: new Date() }, patch);
-      sheet_(SH.team, T_HEAD).appendRow(T_HEAD.map((k) => (row[k] === undefined ? '' : row[k])));
+      sheet_(SH.team, T_HEAD).appendRow(rowValues_(SH.team, T_HEAD, row));
       return { ok: true, barber: adminBarber_(normTeam_(row)) };
     }
 
@@ -270,7 +270,7 @@ function insertBooking_(b, source, barber) {
     smsConfirm: b.sendConfirm === false ? 'skipped' : 'queued', smsConfirmAt: '',
     smsRemind: remindAt ? 'scheduled' : 'skipped', smsRemindAt: '', cancelledAt: '',
   };
-  sheet_(SH.bookings, B_HEAD).appendRow(B_HEAD.map((k) => (row[k] === undefined ? '' : row[k])));
+  sheet_(SH.bookings, B_HEAD).appendRow(rowValues_(SH.bookings, B_HEAD, row));
   row._row = sheet_(SH.bookings, B_HEAD).getLastRow();
 
   if (row.smsConfirm === 'queued') {
@@ -364,6 +364,15 @@ function ss_() {
   if (!id) { id = SpreadsheetApp.create('Urban Studio · Programări').getId(); props.setProperty('SHEET_ID', id); }
   return SpreadsheetApp.openById(id);
 }
+// Valorile ca „10:00” sau „0728...” se scriu ca text (cu apostrof), altfel Sheets le transformă în oră sau număr.
+function rowValues_(name, head, row) {
+  const text = TEXT_COLS[name] || [];
+  return head.map((k) => {
+    const v = row[k] === undefined ? '' : row[k];
+    return text.includes(k) && v !== '' ? "'" + v : v;
+  });
+}
+function sheetTz_() { return ss_().getSpreadsheetTimeZone() || CFG.tz; }
 function sheet_(name, head) {
   const ss = ss_();
   let sh = ss.getSheetByName(name);
@@ -392,9 +401,10 @@ function updateRow_(name, head, rowIndex, patch) {
 }
 
 function bookings_() {
+  const tz = sheetTz_();
   return read_(SH.bookings, B_HEAD).map((b) => {
-    if (b.date instanceof Date) b.date = Utilities.formatDate(b.date, CFG.tz, 'yyyy-MM-dd');
-    if (b.time instanceof Date) b.time = Utilities.formatDate(b.time, CFG.tz, 'HH:mm');
+    if (b.date instanceof Date) b.date = Utilities.formatDate(b.date, tz, 'yyyy-MM-dd');
+    if (b.time instanceof Date) b.time = Utilities.formatDate(b.time, tz, 'HH:mm');
     b.phone = String(b.phone);
     b.duration = Number(b.duration);
     return b;
