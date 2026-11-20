@@ -4,7 +4,7 @@
 import { CONFIG, SALON, BARBERS as SEED } from './data.js';
 import { store, bus, fmt } from './lib.js';
 import { Bookings } from './store.js';
-import { planReminder } from './reminders.js';
+import { planReminder, onCancelled } from './reminders.js';
 
 export const isRemote = () => !!CONFIG.apiUrl;
 
@@ -94,6 +94,28 @@ async function loadPublic() {
 
 const toMin = (t) => { const [h, m] = String(t).split(':').map(Number); return h * 60 + m; };
 
+/* Programările viitoare de pe acest telefon: dacă frizerul le-a anulat din panou, apar anulate și aici. */
+let syncing = null;
+function syncMine() {
+  if (syncing) return syncing;
+  const now = Date.now();
+  const ids = Bookings.mine().filter((b) => b.status === 'confirmed' && b.endMs > now).map((b) => b.id);
+  if (!ids.length) return Promise.resolve();
+  syncing = fetch(`${CONFIG.apiUrl}?action=mine&ids=${encodeURIComponent(ids.join(','))}`)
+    .then((r) => r.json())
+    .then((data) => {
+      if (!data.ok) return;
+      for (const s of data.bookings || []) {
+        if (s.status === 'confirmed') continue;
+        const upd = Bookings.update(s.id, { status: s.status === 'rescheduled' ? 'rescheduled' : 'cancelled', cancelledAt: s.cancelledAt || now, cancelledBy: 'salon' });
+        if (upd) onCancelled(upd).catch(() => {}); // oprește reamintirea de pe telefon
+      }
+    })
+    .catch(() => {})
+    .finally(() => { syncing = null; });
+  return syncing;
+}
+
 /* ---------- SMS pe programare ---------- */
 export function withSms(b, serverSms = false) {
   const plan = b.remind ? (b.reminder || planReminder(b.startMs)) : null;
@@ -114,6 +136,7 @@ export const Api = {
     const cached = store.get('remoteCache', null);
     if (cached) applyPublic(cached);
     const fresh = loadPublic().then((ok) => { if (ok && cached) bus.emit('team'); });
+    syncMine();
     if (!cached) await Promise.race([fresh, new Promise((r) => setTimeout(r, 7000))]);
   },
   reloadLocal() { /* echipa locală se recitește la fiecare apel */ },
@@ -139,10 +162,17 @@ export const Api = {
       // în mod local, programările adăugate din panou sunt tot în acest browser
       return local;
     }
-    return (remote.busy[iso]?.[barberId] || []).concat(local);
+    // la reprogramare, ora veche a clientului nu blochează noua oră (serverul nu trimite coduri, deci o scoatem după interval)
+    const server = (remote.busy[iso]?.[barberId] || []).slice();
+    const old = ignoreId && Bookings.get(ignoreId);
+    if (old && old.date === iso && old.barberId === barberId) {
+      const i = server.findIndex(([a, c]) => a === toMin(old.time) && c === toMin(old.time) + old.duration);
+      if (i >= 0) server.splice(i, 1);
+    }
+    return server.concat(local);
   },
 
-  async refresh() { if (isRemote()) await loadPublic(); },
+  async refresh() { if (isRemote()) { await loadPublic(); syncMine(); } },
 
   /* programare din aplicația clienților */
   async book(b) {
@@ -225,6 +255,7 @@ export const Admin = {
   setActive(id, active) { return this.call('setActive', { id, active }); },
   book(booking) { return this.call('book', { booking }); },
   cancel(id) { return this.call('cancel', { id }); },
+  deleteBooking(id) { return this.call('deleteBooking', { id }); },
   markSms(id, kind, status) { return this.call('markSms', { id, kind, status }); },
   resendSms(id, kind) { return this.call('resendSms', { id, kind }); },
   changePassword(oldPw, newPw) { return this.call('password', { old: oldPw, next: newPw }); },
@@ -306,6 +337,14 @@ async function localOp(userId, op, d) {
     case 'cancel': {
       const b = Bookings.update(d.id, { status: 'cancelled', cancelledAt: Date.now(), cancelledBy: userId });
       return b ? { ok: true, booking: b } : { ok: false, error: 'notfound' };
+    }
+
+    case 'deleteBooking': {
+      const b = Bookings.get(d.id);
+      if (!b) return { ok: true };
+      if (b.status === 'confirmed' && b.endMs > Date.now()) return { ok: false, error: 'live' };
+      Bookings.remove(d.id);
+      return { ok: true };
     }
 
     case 'markSms': {

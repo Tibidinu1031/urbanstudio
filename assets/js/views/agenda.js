@@ -4,7 +4,7 @@ import { icon } from '../icons.js';
 import { esc, fmt, bus, haptic, toast, openSheet, isIOS, isStandalone } from '../lib.js';
 import { Bookings } from '../store.js';
 import { reminderText, notifState, enableNotifications, onCancelled } from '../reminders.js';
-import { Api } from '../api.js';
+import { Api, isRemote } from '../api.js';
 import { avatar, barberById, calendarSheet, directionsSheet, notifSheet } from '../components.js';
 
 let el;
@@ -20,7 +20,11 @@ export function initAgenda(root) {
   setInterval(() => { if (!el.hidden) el.querySelectorAll('[data-cd]').forEach((c) => { c.textContent = fmt.countdown(Number(c.dataset.cd) - Date.now()); }); }, 30000);
 }
 
-export function onShow() { render(); }
+export function onShow() {
+  render();
+  // anulările făcute de frizer din panou apar și aici
+  if (isRemote() && Bookings.upcoming().length) Api.refresh();
+}
 
 function card(b, past = false) {
   const d = fmt.date(b.date, b.time);
@@ -32,7 +36,7 @@ function card(b, past = false) {
     if (rem) chips += `<span class="chip chip--blue">${icon('bell')} ${b.reminder.notified ? 'Reamintire trimisă' : `Reamintire ${rem.charAt(0).toLowerCase() + rem.slice(1)}`}</span>`;
     if (b.calendar) chips += `<span class="chip">${icon('calCheck')} În calendar</span>`;
   } else {
-    const st = b.status === 'cancelled' ? ['chip--red', 'Anulată'] : b.status === 'rescheduled' ? ['', 'Reprogramată'] : ['', 'Finalizată'];
+    const st = b.status === 'cancelled' ? ['chip--red', b.cancelledBy === 'salon' ? 'Anulată de salon' : 'Anulată'] : b.status === 'rescheduled' ? ['', 'Reprogramată'] : ['', 'Finalizată'];
     chips = `<span class="chip ${st[0]}">${st[1]}</span>`;
   }
   return `

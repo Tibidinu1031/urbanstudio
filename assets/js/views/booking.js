@@ -448,6 +448,7 @@ async function confirm() {
     remind: state.remind, reminder: plan ? { ...plan, notified: false } : null,
     createdAt: Date.now(),
   };
+  if (state.rescheduleId) b.replaces = state.rescheduleId;
 
   const btn = $('#cta-btn');
   btn.disabled = true;

@@ -70,7 +70,19 @@ function seedTeam_() {
 function doGet(e) {
   const p = (e && e.parameter) || {};
   if (p.action === 'public') return json_(publicData_());
+  if (p.action === 'mine') return json_(mine_(p.ids));
   return json_({ ok: true, service: 'urbanstudio' });
+}
+
+// Starea programărilor de pe telefonul unui client (după codurile lor), ca anulările făcute de frizer să ajungă și la client.
+function mine_(ids) {
+  const want = String(ids || '').split(',').map((s) => s.trim()).filter(String).slice(0, 50);
+  if (!want.length) return { ok: true, bookings: [] };
+  const all = bookings_();
+  return { ok: true, bookings: want.map((id) => {
+    const b = all.find((x) => x.id === id);
+    return b ? { id: id, status: b.status, cancelledAt: Number(b.cancelledAt) || null } : { id: id, status: 'deleted' };
+  }) };
 }
 
 function doPost(e) {
@@ -114,8 +126,12 @@ function publicBook_(b) {
   if (all.some((x) => x.id === b.id)) return { ok: true, booking: toClient_(all.find((x) => x.id === b.id)) };
   const barber = team_().find((x) => x.id === b.barberId && x.active);
   if (!barber) return { ok: false, error: 'taken' };
-  if (!inSchedule_(barber, b) || clash_(all, b)) return { ok: false, error: 'taken' };
+  // reprogramare: ora veche a aceluiași client nu blochează noua oră și se închide odată cu noua programare
+  const old = b.replaces ? all.find((x) => x.id === b.replaces && x.status === 'confirmed' && digits_(x.phone).slice(-9) === digits_(b.phone).slice(-9)) : null;
+  const others = old ? all.filter((x) => x.id !== old.id) : all;
+  if (!inSchedule_(barber, b) || clash_(others, b)) return { ok: false, error: 'taken' };
   const row = insertBooking_(b, 'app', barber);
+  if (old) cancelRow_(old, 'rescheduled');
   return { ok: true, booking: toClient_(row) };
 }
 
@@ -123,6 +139,7 @@ function publicCancel_(id, phone) {
   const b = bookings_().find((x) => x.id === id);
   if (!b) return { ok: false, error: 'notfound' };
   if (digits_(b.phone).slice(-9) !== digits_(phone).slice(-9)) return { ok: false, error: 'auth' };
+  if (b.status !== 'confirmed') return { ok: true }; // deja anulată sau mutată
   cancelRow_(b);
   if (CFG.notifySalonByEmail) MailApp.sendEmail(notifyTo_(), `Programare anulată: ${b.name} · ${b.date} ${b.time}`, `Clientul a anulat din aplicație. Cod: ${b.id}, frizer: ${b.barberName}.`);
   return { ok: true };
@@ -224,6 +241,14 @@ function admin_(me, op, d) {
       return { ok: true };
     }
 
+    case 'deleteBooking': {
+      const b = bookings_().find((x) => x.id === d.id);
+      if (!b) return { ok: true };
+      if (b.status === 'confirmed' && Number(b.endMs) > Date.now()) return { ok: false, error: 'live' };
+      deleteBookingRows_([b._row]);
+      return { ok: true };
+    }
+
     case 'markSms': {
       const b = bookings_().find((x) => x.id === d.id);
       if (!b) return { ok: false, error: 'notfound' };
@@ -285,8 +310,22 @@ function insertBooking_(b, source, barber) {
   return row;
 }
 
-function cancelRow_(b) {
-  const patch = { status: 'cancelled', cancelledAt: Date.now() };
+// Șterge definitiv rânduri din foaia Programari (de jos în sus, ca numerele rândurilor să rămână valabile).
+function deleteBookingRows_(rows) {
+  const sh = sheet_(SH.bookings, B_HEAD);
+  rows.slice().sort((a, b) => b - a).forEach((r) => sh.deleteRow(r));
+}
+
+// Întreținere: rulează din editor ca să ștergi programările de test (numele începe cu „TEST Claude”).
+function stergeProgramariTest() {
+  const test = bookings_().filter((b) => /^test\s*claude/i.test(String(b.name || '').trim()));
+  deleteBookingRows_(test.map((b) => b._row));
+  console.log(`Șterse ${test.length} programări de test.`);
+  return test.length;
+}
+
+function cancelRow_(b, status) {
+  const patch = { status: status || 'cancelled', cancelledAt: Date.now() };
   if (b.smsRemind === 'scheduled') patch.smsRemind = 'skipped';
   updateRow_(SH.bookings, B_HEAD, b._row, patch);
 }
@@ -306,9 +345,16 @@ function inSchedule_(barber, b) {
   const s = barber.schedule || { week: SALON_HOURS, days: {} };
   const p = String(b.date).split('-').map(Number);
   const dow = new Date(p[0], p[1] - 1, p[2]).getDay();
-  const list = s.days && Object.prototype.hasOwnProperty.call(s.days, b.date) ? s.days[b.date] : (s.week[dow] || []);
+  const list = s.days && Object.prototype.hasOwnProperty.call(s.days, b.date) ? s.days[b.date] : ((s.week || {})[dow] || []);
   const start = toMin_(b.time), end = start + Number(b.duration);
-  return list.some((iv) => start >= toMin_(iv[0]) && end <= toMin_(iv[1]));
+  // intervalele lipite (10:00-10:45 și 10:45-11:30) contează ca unul singur
+  const merged = [];
+  (list || []).map((iv) => [toMin_(iv[0]), toMin_(iv[1])]).filter((iv) => iv[1] > iv[0]).sort((x, y) => x[0] - y[0]).forEach((iv) => {
+    const last = merged[merged.length - 1];
+    if (last && iv[0] <= last[1]) last[1] = Math.max(last[1], iv[1]);
+    else merged.push(iv);
+  });
+  return merged.some((iv) => start >= iv[0] && end <= iv[1]);
 }
 function clash_(all, b) {
   const s = toMin_(b.time), e = s + Number(b.duration);

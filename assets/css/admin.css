@@ -236,3 +236,25 @@ small.tone-blue { color: var(--blue-text) !important; }
 .tslot[aria-pressed="true"] b { color: var(--ink); }
 .tslot.is-booked { background: var(--blue); color: rgba(255, 255, 255, .85); box-shadow: none; }
 .tslot.is-booked b { color: #fff; }
+.tslot.is-partial { background: rgba(244, 244, 245, .14); color: var(--fg-2); box-shadow: inset 0 0 0 1.5px rgba(244, 244, 245, .55); }
+.tslot.is-partial b { color: var(--fg); }
+
+/* intervale exacte + interval personalizat */
+.iv-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.iv-chip {
+  display: inline-flex; align-items: center; gap: 4px; height: 38px; padding: 0 4px 0 13px; border-radius: 12px;
+  background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--line);
+  font-size: 14.5px; font-weight: 800; font-variant-numeric: tabular-nums;
+}
+.iv-chip button {
+  appearance: none; border: 0; width: 30px; height: 30px; border-radius: 9px; display: grid; place-items: center;
+  background: transparent; color: var(--fg-3);
+}
+.iv-chip button:active { background: var(--surface-3); color: var(--fg); }
+.iv-add { margin-top: 14px; padding: 14px; border-radius: 18px; background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--line); }
+.iv-add__row { display: grid; gap: 12px; margin-bottom: 14px; }
+.iv-add .t-field .input { background: var(--surface); }
+.dur-row { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; }
+.dur-row .chip-btn { padding: 0; justify-content: center; font-variant-numeric: tabular-nums; }
+.dur-row--4 { grid-template-columns: repeat(4, 1fr); }
+.bk-list .list__icon { background: rgba(77, 136, 255, .16); color: var(--blue-text); }

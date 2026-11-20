@@ -4,7 +4,8 @@ export const CONFIG = {
   // URL-ul aplicației web Google Apps Script (vezi backend/README.md).
   // Gol = aplicația funcționează local: disponibilitate simulată, reamintiri pe telefon.
   apiUrl: 'https://script.google.com/macros/s/AKfycbxD4fJphTnl7Yud99JmYLvCGyyfMtUdpOwsOP-IV8EsvQjhlCN11sRBnvsu8yIawo20DA/exec',
-  slotStep: 45,            // durata unui interval de programare, în minute
+  slotStep: 45,            // mărimea blocurilor din grila pe care o bifează frizerii, în minute
+  startStep: 15,           // clienții pot începe pe orice sfert de oră liber din intervalele deschise
   slotStart: '08:30',      // primul interval din grila pe care o bifează frizerii
   slotEnd: '21:15',        // ultimul interval se termină cel târziu la această oră
   minLeadMinutes: 30,      // cât de devreme se poate face o programare pentru azi
@@ -57,7 +58,7 @@ export const SERVICES = [
   { id: 'tuns-barba', group: 'combo', name: 'Tuns și barbă', note: 'Tuns complet și barbă', duration: 45, price: 95, icon: 'beard', popular: 2 },
   { id: 'masina-barba', group: 'combo', name: 'Tuns mașină și barbă', note: 'Mașină și barbă', duration: 45, price: 90, icon: 'clipper' },
   { id: 'zero-barba', group: 'combo', name: 'Tuns 0 și barbă', note: 'Zero la mașină și barbă', duration: 30, price: 65, icon: 'clipper' },
-  { id: 'complet', group: 'combo', name: 'Tuns, barbă și spălat', note: 'Pachetul complet', duration: 60, price: 115, icon: 'drop' },
+  { id: 'complet', group: 'combo', name: 'Tuns, barbă și spălat', note: 'Pachetul complet', duration: 75, price: 115, icon: 'drop' },
   { id: 'barba', group: 'barba', name: 'Tuns barbă', note: 'Contur și aranjat', duration: 15, price: 35, icon: 'beard', popular: 3 },
 ];
 

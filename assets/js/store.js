@@ -16,6 +16,7 @@ export const Bookings = {
     this.save(l);
     return out;
   },
+  remove(id) { const l = this.list(); const n = l.filter((b) => b.id !== id); if (n.length !== l.length) this.save(n); },
   /* programările clientului de pe acest telefon (fără cele adăugate de frizer din panou, în modul demo) */
   mine() { return this.list().filter((b) => b.source !== 'admin'); },
   upcoming(now = Date.now()) {

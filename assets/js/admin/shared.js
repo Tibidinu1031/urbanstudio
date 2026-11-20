@@ -49,6 +49,8 @@ export function errText(e) {
     last: 'Trebuie să rămână cel puțin un frizer activ.',
     credentials: 'Parola curentă nu e corectă.',
     manual: 'Fără gateway SMS: trimite manual.',
+    live: 'Programarea e încă activă. Anuleaz-o mai întâi.',
+    op: 'Serverul nu are încă această funcție. Actualizează scriptul Google.',
   })[e] || 'Ceva n-a mers. Încearcă din nou.';
 }
 
@@ -160,7 +162,30 @@ export function bookingSheet(b) {
         ${row('confirm', 'message', 'Confirmare')}
         ${row('remind', 'bell', 'Reminder cu o zi înainte')}
       </div>`,
-    foot: live ? `<button class="btn btn--ghost btn--block" type="button" data-cancel>${icon('trash')} Anulează programarea</button>` : '',
+    foot: live
+      ? `<button class="btn btn--ghost btn--block" type="button" data-cancel>${icon('trash')} Anulează programarea</button>`
+      : `<button class="btn btn--ghost btn--block" type="button" data-delete>${icon('trash')} Șterge din istoric</button>`,
+  });
+
+  const del = s.el.querySelector('[data-delete]');
+  let delArmed = false;
+  del?.addEventListener('click', async () => {
+    haptic('heavy');
+    if (!delArmed) {
+      delArmed = true;
+      del.classList.replace('btn--ghost', 'btn--danger');
+      del.textContent = 'Apasă din nou: se șterge definitiv';
+      setTimeout(() => { if (delArmed && document.body.contains(del)) { delArmed = false; del.classList.replace('btn--danger', 'btn--ghost'); del.innerHTML = `${icon('trash')} Șterge din istoric`; } }, 3500);
+      return;
+    }
+    del.disabled = true;
+    const r = await Admin.deleteBooking(b.id);
+    del.disabled = false;
+    if (!r.ok) { toast(errText(r.error), { ic: 'info', tone: 'red' }); return; }
+    state.bookings = state.bookings.filter((y) => y.id !== b.id);
+    s.close();
+    toast('Programarea a fost ștearsă din istoric', { ic: 'check' });
+    bus.emit('admin:data');
   });
 
   s.el.addEventListener('click', (e) => {
@@ -189,9 +214,10 @@ export function bookingSheet(b) {
 }
 
 /* ---------- programare nouă (telefonică / la salon) ---------- */
+const DURS = [15, 30, 45, 60, 75, 90, 105, 120];
 export function newBookingSheet({ date, barberId } = {}) {
   const f = {
-    name: '', phone: '', serviceId: SERVICES[0].id,
+    name: '', phone: '', serviceId: SERVICES[0].id, duration: SERVICES[0].duration,
     barberId: barberId || state.user.id,
     date: date || fmt.iso(new Date()),
     time: null, notes: '', sms: true,
@@ -200,10 +226,10 @@ export function newBookingSheet({ date, barberId } = {}) {
     .filter((x) => x.status === 'confirmed' && x.date === iso && x.barberId === id)
     .map((x) => [toMin(x.time), toMin(x.time) + x.duration]);
 
+  const durHTML = () => DURS.map((m) => `<button class="chip-btn chip-btn--sm" type="button" data-dur="${m}" aria-pressed="${m === f.duration}">${m}</button>`).join('');
   const slotsHTML = () => {
-    const svc = SERVICES.find((x) => x.id === f.serviceId);
-    const slots = freeSlots(fmt.date(f.date), f.barberId, svc.duration, { ignoreLead: true, barbers: state.team, busyFn });
-    if (!slots.length) return '<div class="empty-mini">Nicio oră liberă în programul frizerului pentru această zi.</div>';
+    const slots = freeSlots(fmt.date(f.date), f.barberId, f.duration, { ignoreLead: true, barbers: state.team, busyFn });
+    if (!slots.length) return `<div class="empty-mini">Nicio oră liberă de ${f.duration} de minute în programul frizerului pentru această zi.</div>`;
     if (!slots.some((x) => x.time === f.time)) f.time = null;
     return `<div class="slots">${slots.map((x) => `<button class="slot" type="button" data-time="${x.time}" aria-pressed="${x.time === f.time}">${x.time}</button>`).join('')}</div>`;
   };
@@ -215,6 +241,7 @@ export function newBookingSheet({ date, barberId } = {}) {
         <div class="field" data-f="name"><label class="field__label" for="nb-name">Nume client</label><input class="input" id="nb-name" autocomplete="off" autocapitalize="words" placeholder="Nume și prenume"><div class="field__err">Completează numele.</div></div>
         <div class="field" data-f="phone"><label class="field__label" for="nb-phone">Telefon client</label><input class="input tnum" id="nb-phone" type="tel" inputmode="tel" placeholder="07xx xxx xxx"><div class="field__err">Număr invalid (10 cifre, începe cu 07).</div></div>
         <div class="field"><label class="field__label" for="nb-svc">Serviciu</label><select class="input select" id="nb-svc">${SERVICES.map((x) => `<option value="${x.id}">${esc(x.name)} · ${x.price} lei · ${x.duration} min</option>`).join('')}</select></div>
+        <div class="field"><span class="field__label">Durată <small>minute</small></span><div class="dur-row dur-row--4" data-durs>${durHTML()}</div></div>
         <div class="field"><label class="field__label" for="nb-barber">Frizer</label><select class="input select" id="nb-barber">${teamActive().map((b) => `<option value="${b.id}" ${b.id === f.barberId ? 'selected' : ''}>${esc(b.name)}</option>`).join('')}</select></div>
         <div class="field"><label class="field__label" for="nb-date">Data</label><input class="input" id="nb-date" type="date" value="${f.date}" min="${fmt.iso(new Date())}"></div>
         <div class="field" data-f="time"><label class="field__label">Ora</label><div data-slots>${slotsHTML()}</div><div class="field__err">Alege o oră.</div></div>
@@ -230,7 +257,12 @@ export function newBookingSheet({ date, barberId } = {}) {
 
   const $f = (sel) => s.el.querySelector(sel);
   const refresh = () => { $f('[data-slots]').innerHTML = slotsHTML(); };
-  $f('#nb-svc').addEventListener('change', (e) => { f.serviceId = e.target.value; refresh(); });
+  $f('#nb-svc').addEventListener('change', (e) => {
+    f.serviceId = e.target.value;
+    f.duration = SERVICES.find((x) => x.id === f.serviceId).duration;
+    $f('[data-durs]').innerHTML = durHTML();
+    refresh();
+  });
   $f('#nb-barber').addEventListener('change', (e) => { f.barberId = e.target.value; refresh(); });
   $f('#nb-date').addEventListener('change', (e) => { f.date = e.target.value || fmt.iso(new Date()); refresh(); });
   s.el.addEventListener('click', (e) => {
@@ -240,6 +272,13 @@ export function newBookingSheet({ date, barberId } = {}) {
       f.time = t.dataset.time;
       s.el.querySelectorAll('[data-time]').forEach((x) => x.setAttribute('aria-pressed', String(x === t)));
       $f('[data-f="time"]').classList.remove('is-invalid');
+    }
+    const du = e.target.closest('[data-dur]');
+    if (du) {
+      haptic('select');
+      f.duration = Number(du.dataset.dur);
+      $f('[data-durs]').innerHTML = durHTML();
+      refresh();
     }
     const sw = e.target.closest('[data-smsflag]');
     if (sw) { haptic('select'); f.sms = !f.sms; sw.setAttribute('aria-checked', String(f.sms)); }
@@ -263,9 +302,9 @@ export function newBookingSheet({ date, barberId } = {}) {
     const plan = planReminder(startMs);
     const booking = {
       id: newCode(), status: 'confirmed',
-      serviceId: svc.id, serviceName: svc.name, price: svc.price, duration: svc.duration,
+      serviceId: svc.id, serviceName: svc.name, price: svc.price, duration: f.duration,
       barberId: barber.id, barberName: barber.name, barberShort: barber.short, anyBarber: false,
-      date: f.date, time: f.time, startMs, endMs: startMs + svc.duration * 6e4,
+      date: f.date, time: f.time, startMs, endMs: startMs + f.duration * 6e4,
       name: f.name, phone: fmt.phone(f.phone), email: '', notes: f.notes,
       remind: true, reminder: plan ? { ...plan, notified: false } : null,
       createdAt: Date.now(), createdBy: state.user.id,

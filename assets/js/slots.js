@@ -57,38 +57,58 @@ export function gridSlots() {
   return out;
 }
 
+/* ---------- matematică pe intervale (în minute) ---------- */
+export function normalize(iv) {
+  const s = iv.filter(([a, b]) => b > a).map(([a, b]) => [a, b]).sort((x, y) => x[0] - y[0]);
+  const out = [];
+  for (const [a, b] of s) {
+    const last = out[out.length - 1];
+    if (last && a <= last[1]) last[1] = Math.max(last[1], b);
+    else out.push([a, b]);
+  }
+  return out;
+}
+export const union = (iv, a, b) => normalize([...iv, [a, b]]);
+export function subtract(iv, a, b) {
+  const out = [];
+  for (const [x, y] of iv) {
+    if (b <= x || a >= y) { out.push([x, y]); continue; }
+    if (x < a) out.push([x, a]);
+    if (b < y) out.push([b, y]);
+  }
+  return normalize(out);
+}
+export const coverage = (iv, a, b) => iv.reduce((s, [x, y]) => s + Math.max(0, Math.min(b, y) - Math.max(a, x)), 0);
+export const totalMinutes = (iv) => normalize(iv).reduce((s, [a, b]) => s + b - a, 0);
+export const toTimes = (iv) => normalize(iv).map(([a, b]) => [toTime(a), toTime(b)]);
+
 /* intervalele bifate (începuturi în minute) → intervale continue [['08:30','10:00'], ...] */
 export function mergeSlots(starts) {
-  const sorted = [...new Set(starts)].sort((a, b) => a - b);
-  const out = [];
-  for (const t of sorted) {
-    const last = out[out.length - 1];
-    if (last && last[1] === t) last[1] = t + CONFIG.slotStep;
-    else out.push([t, t + CONFIG.slotStep]);
-  }
-  return out.map(([a, b]) => [toTime(a), toTime(b)]);
+  return toTimes(starts.map((t) => [t, t + CONFIG.slotStep]));
 }
 
+/* Clienții pot începe pe orice sfert de oră liber din intervalele deschise de frizer,
+   dacă serviciul (15, 30, 45, 75 de minute...) încape întreg în interval și nu se suprapune cu altă programare. */
 export function freeSlots(date, barberId, duration, { ignoreId, ignoreLead = false, barbers, busyFn } = {}) {
   const iso = fmt.iso(date);
   const now = new Date();
   const isToday = iso === fmt.iso(now);
-  const minStart = isToday && !ignoreLead ? now.getHours() * 60 + now.getMinutes() + CONFIG.minLeadMinutes : -1;
+  const nowMin = now.getHours() * 60 + now.getMinutes();
+  const minStart = !isToday ? -1 : ignoreLead ? nowMin : nowMin + CONFIG.minLeadMinutes;
+  const step = CONFIG.startStep || 15;
   const map = new Map();
-  const list = barbers ? barbers.filter((b) => !barberId || barberId === 'any' || b.id === barberId) : pool(barberId);
+  const list = barbers ? barbers.filter((b) => b.active !== false && (!barberId || barberId === 'any' || b.id === barberId)) : pool(barberId);
   for (const b of list) {
     const busy = busyFn ? busyFn(iso, b.id) : Api.busy(iso, b.id, ignoreId);
-    const iv = barberIntervals(b, date);
-    // orele pornesc doar din grila de 45 de minute; serviciul trebuie să încapă în intervalele bifate
-    for (const t of gridSlots()) {
-      if (t < minStart) continue;
-      if (!iv.some(([a, c]) => t >= a && t + duration <= c)) continue;
-      if (overlaps(busy, t, t + duration)) continue;
-      if (!map.has(t)) map.set(t, []);
-      map.get(t).push(b.id);
+    for (const [a, c] of normalize(barberIntervals(b, date))) {
+      for (let t = a; t + duration <= c; t += step) {
+        if (t < minStart || overlaps(busy, t, t + duration)) continue;
+        if (!map.has(t)) map.set(t, new Set());
+        map.get(t).add(b.id);
+      }
     }
   }
-  return [...map.entries()].sort((a, b) => a[0] - b[0]).map(([t, ids]) => ({ time: toTime(t), min: t, barbers: ids }));
+  return [...map.entries()].sort((a, b) => a[0] - b[0]).map(([t, ids]) => ({ time: toTime(t), min: t, barbers: [...ids] }));
 }
 
 export function nextAvailable(barberId = 'any', duration = 30, from = new Date()) {
