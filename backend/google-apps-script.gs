@@ -99,11 +99,15 @@ function doPost(e) {
         if (!userId) return json_({ ok: false, error: 'auth' });
         const me = team_().find((b) => b.id === userId && b.active);
         if (!me) return json_({ ok: false, error: 'auth' });
-        return json_(admin_(me, d.op, d));
+        const res = admin_(me, d.op, d);
+        // apare în Apps Script → Executions, util când ceva nu se salvează
+        if (d.op !== 'team' && d.op !== 'bookings' && d.op !== 'me') console.log(`${me.id} ${d.op}${d.id ? ' ' + d.id : ''}: ${res.ok ? 'ok' : res.error}`);
+        return json_(res);
       }
       default: return json_({ ok: false, error: 'action' });
     }
   } catch (err) {
+    console.error(String(err && err.stack || err));
     return json_({ ok: false, error: String(err) });
   } finally {
     lock.releaseLock();
