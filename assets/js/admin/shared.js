@@ -1,5 +1,5 @@
 /* Starea panoului și piese comune: foaia unei programări, SMS manual, programare nouă din panou. */
-import { Api, Admin, isRemote, withSms } from '../api.js';
+import { Api, Admin, isRemote, withSms, lastNetError } from '../api.js';
 import { SERVICES, CONFIG } from '../data.js';
 import { icon } from '../icons.js';
 import { esc, fmt, haptic, toast, openSheet, bus } from '../lib.js';
@@ -40,7 +40,7 @@ export function bookingStatus(b, now = Date.now()) {
 
 export function errText(e) {
   return ({
-    network: 'Fără conexiune la server. Încearcă din nou.',
+    network: `Fără conexiune la server. Încearcă din nou.${lastNetError ? ` (${lastNetError})` : ''}`,
     taken: 'Ora e deja ocupată la acest frizer.',
     'username-taken': 'Numele de utilizator e deja folosit.',
     username: 'Completează numele de utilizator.',

@@ -54,14 +54,45 @@ const saveTeam = (team) => { store.set('team', team); bus.emit('team', team); };
 /* ---------- mod server ---------- */
 const remote = { barbers: [], busy: {}, sms: false, loaded: false };
 
-async function post(payload) {
-  const res = await fetch(CONFIG.apiUrl, {
-    method: 'POST',
-    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-    body: JSON.stringify(payload),
-  });
+/* Ultima eroare de rețea, în cuvinte scurte (apare lângă „Fără conexiune la server”, ca să știm ce s-a întâmplat). */
+export let lastNetError = '';
+
+async function postOnce(payload) {
+  let res;
+  try {
+    res = await fetch(CONFIG.apiUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify(payload),
+      cache: 'no-store',
+      credentials: 'omit',
+      redirect: 'follow',
+    });
+  } catch (e) {
+    throw new Error(`rețea: ${e?.message || e}`);
+  }
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return res.json();
+  const text = await res.text();
+  try { return JSON.parse(text); } catch { throw new Error(`răspuns invalid: ${text.replace(/\s+/g, ' ').slice(0, 60)}`); }
+}
+
+async function post(payload) {
+  try {
+    const r = await postOnce(payload);
+    lastNetError = '';
+    return r;
+  } catch (e) {
+    // o a doua încercare după o pauză scurtă (serverul Google pornește uneori greu)
+    await new Promise((ok) => setTimeout(ok, 900));
+    try {
+      const r = await postOnce(payload);
+      lastNetError = '';
+      return r;
+    } catch (e2) {
+      lastNetError = String(e2.message || e2);
+      throw e2;
+    }
+  }
 }
 
 function applyPublic(data) {

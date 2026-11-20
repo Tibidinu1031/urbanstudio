@@ -1,5 +1,5 @@
 /* Panoul frizerilor: autentificare, taburi, cont. */
-import { Api, Admin, isRemote } from '../api.js';
+import { Api, Admin, isRemote, lastNetError } from '../api.js';
 import { icon } from '../icons.js';
 import { logoSVG } from '../logo.js';
 import { $, $$, esc, fmt, haptic, toast, openSheet, bus, reduceMotion, setNavHidden, onVisible } from '../lib.js';
@@ -21,6 +21,8 @@ let started = false;
 const scrollPos = {};
 
 /* ---------- login ---------- */
+const netMessage = () => `Fără conexiune la server. Încearcă din nou.${lastNetError ? ` (${lastNetError})` : ''}`;
+
 function showLogin(message = '') {
   document.body.classList.add('booting');
   $('#app').hidden = true;
@@ -71,7 +73,7 @@ function showLogin(message = '') {
       btn.disabled = false;
       btn.textContent = 'Intră';
       haptic('heavy');
-      err.textContent = r.error === 'network' ? 'Fără conexiune la server.' : 'Utilizator sau parolă greșite.';
+      err.textContent = r.error === 'network' ? netMessage() : 'Utilizator sau parolă greșite.';
       err.classList.add('is-on');
       form.animate([{ transform: 'translateX(0)' }, { transform: 'translateX(-8px)' }, { transform: 'translateX(6px)' }, { transform: 'translateX(0)' }], { duration: 320 });
       return;
@@ -98,7 +100,7 @@ async function start(user) {
   if (!user) {
     showLoading();
     const me = await Admin.me();
-    if (!me.ok) { showLogin(me.error === 'network' ? 'Fără conexiune la server.' : ''); return; }
+    if (!me.ok) { showLogin(me.error === 'network' ? netMessage() : ''); return; }
     user = me.user;
   }
   state.user = user;
