@@ -1,13 +1,14 @@
-/* Program: calendarul lunii. Tap pe o zi → orele în care frizerul primește clienți:
-   blocuri rapide de 45 de minute sau intervale personalizate (oră de start + durată). */
+/* Program: calendarul lunii. Tap pe o zi → orele în care frizerul primește clienți.
+   Program adaptiv: sloturi de durata aleasă (15, 30, 45...) care se reașază după fiecare programare,
+   plus intervale personalizate (oră de start + durată). */
 import { Admin, defaultSchedule } from '../api.js';
 import { CONFIG } from '../data.js';
 import { icon } from '../icons.js';
 import { esc, fmt, haptic, bus, toast, openSheet, cap } from '../lib.js';
-import { toMin, toTime, gridSlots, normalize, union, subtract, coverage, totalMinutes, toTimes } from '../slots.js';
+import { toMin, toTime, normalize, union, subtract, totalMinutes, toTimes, adaptiveBlocks, dayWindow } from '../slots.js';
 import { state, topbar, barberChips, barberOf, loadTeam, errText } from './shared.js';
 
-const BLOCK = CONFIG.slotStep;
+const STEPS = [15, 30, 45, 60, 75, 90];
 const DOW_HEAD = ['Lu', 'Ma', 'Mi', 'Jo', 'Vi', 'Sâ', 'Du'];
 const WEEK = [[1, 'Luni'], [2, 'Marți'], [3, 'Miercuri'], [4, 'Joi'], [5, 'Vineri'], [6, 'Sâmbătă'], [0, 'Duminică']];
 const MONTHS = ['Ianuarie', 'Februarie', 'Martie', 'Aprilie', 'Mai', 'Iunie', 'Iulie', 'August', 'Septembrie', 'Octombrie', 'Noiembrie', 'Decembrie'];
@@ -33,7 +34,10 @@ export function showSchedule() { render(); }
 /* ---------- date ---------- */
 const todayIso = () => fmt.iso(new Date());
 const sched = () => barberOf(barberId)?.schedule || defaultSchedule();
-const isCustom = (iso) => Object.prototype.hasOwnProperty.call(sched().days || {}, iso);
+const has = (o, k) => !!o && Object.prototype.hasOwnProperty.call(o, k);
+const isCustom = (iso) => has(sched().days, iso);
+const defaultStep = () => Number(sched().step) || CONFIG.slotStep;
+const dayStep = (iso) => Number(sched().steps?.[iso]) || defaultStep();
 const parse = (list) => normalize((list || []).map(([a, b]) => [toMin(a), toMin(b)]));
 const templateIv = (dow) => parse(sched().week?.[dow]);
 const dayIv = (iso) => (isCustom(iso) ? parse(sched().days[iso]) : templateIv(fmt.date(iso).getDay()));
@@ -49,13 +53,19 @@ export function hoursLabel(min, short = false) {
   return m ? (h ? `${h} h ${m} min` : `${m} min`) : `${h} h`;
 }
 
+function clone(s) {
+  const out = { week: s.week || {}, days: s.days || {}, steps: s.steps || {} };
+  if (s.step) out.step = Number(s.step);
+  return JSON.parse(JSON.stringify(out));
+}
+
 async function save(schedule, msg) {
   const r = await Admin.saveSchedule(barberId, schedule);
   if (!r.ok) { haptic('heavy'); toast(errText(r.error), { ic: 'info', tone: 'red' }); return false; }
   await loadTeam();
   const back = barberOf(barberId)?.schedule;
   // verificare: ce a rămas salvat pe server trebuie să fie exact ce am trimis
-  if (JSON.stringify(back?.days || {}) !== JSON.stringify(schedule.days || {}) || JSON.stringify(back?.week || {}) !== JSON.stringify(schedule.week || {})) {
+  if (JSON.stringify(clone(back || {})) !== JSON.stringify(clone(schedule))) {
     toast('Serverul nu a păstrat modificarea. Reîncearcă.', { ic: 'info', tone: 'red' });
     render();
     return false;
@@ -65,7 +75,8 @@ async function save(schedule, msg) {
   render();
   return true;
 }
-const clone = (s) => JSON.parse(JSON.stringify({ week: s.week || {}, days: s.days || {} }));
+
+const stepChips = (cur, attr) => STEPS.map((m) => `<button class="chip-btn chip-btn--sm" type="button" data-${attr}="${m}" aria-pressed="${m === cur}">${m}</button>`).join('');
 
 /* ---------- calendar ---------- */
 function render() {
@@ -84,7 +95,7 @@ function render() {
     const past = iso < today;
     const min = totalMinutes(dayIv(iso));
     const bk = bookingsOn(iso).length;
-    const cls = ['cal__day', past ? 'is-past' : '', min ? 'is-open' : 'is-off', isCustom(iso) ? 'is-custom' : '', iso === today ? 'is-today' : ''].join(' ');
+    const cls = ['cal__day', past ? 'is-past' : '', min ? 'is-open' : 'is-off', isCustom(iso) || has(sched().steps, iso) ? 'is-custom' : '', iso === today ? 'is-today' : ''].join(' ');
     cells.push(`<button class="${cls}" type="button" data-iso="${iso}" ${past ? 'aria-disabled="true"' : ''} aria-label="${fmt.dayLong(fmt.date(iso))}: ${hoursLabel(min)}${bk ? `, ${bk === 1 ? 'o programare' : `${bk} programări`}` : ''}">
       <b>${d}</b><small>${hoursLabel(min, true)}</small>${bk ? `<i class="cal__bk">${bk}</i>` : ''}
     </button>`);
@@ -110,10 +121,10 @@ function render() {
           <span><i class="lg-bk"></i>Nr. programări</span>
         </div>
       </section>
-      <p class="fineprint">${icon('info')}<span>Atinge o zi ca să alegi orele în care te pot programa clienții: blocuri de ${BLOCK} de minute sau intervale personalizate, cu durata ta.</span></p>
+      <p class="fineprint">${icon('info')}<span>Atinge o zi ca să alegi orele deschise și durata sloturilor. Sloturile se reașază singure: după un tuns de barbă de 15 minute, următorul slot începe imediat.</span></p>
 
       <section class="sec">
-        <div class="sec__head"><div><h2 class="sec__title">Program obișnuit</h2><p class="sec__sub">Se aplică automat zilelor pe care nu le setezi manual</p></div></div>
+        <div class="sec__head"><div><h2 class="sec__title">Program obișnuit</h2><p class="sec__sub">Se aplică zilelor pe care nu le setezi manual · sloturi de ${defaultStep()} min</p></div></div>
         <div class="list">
           ${WEEK.map(([d, name]) => {
             const iv = templateIv(d);
@@ -131,19 +142,26 @@ function daySheet(iso) {
   const custom = isCustom(iso);
   const booked = bookingsOn(iso);
   const bIv = bookedIv(booked);
+  const busy = booked.map((b) => [toMin(b.time), toMin(b.time) + b.duration, b]);
   let iv = normalize([...dayIv(iso), ...bIv]); // o programare existentă rămâne mereu în interval
+  let step = dayStep(iso);
   let revert = false;
+  let blocks = [];
   const add = { start: iv.length ? iv[iv.length - 1][1] : toMin('10:00'), dur: 45 };
   if (!QUARTERS.includes(add.start)) add.start = toMin('10:00');
 
-  const blockHTML = (t) => {
-    const cov = coverage(iv, t, t + BLOCK);
-    const bk = booked.find((x) => toMin(x.time) < t + BLOCK && t < toMin(x.time) + x.duration);
-    const startsHere = bk && toMin(bk.time) >= t && toMin(bk.time) < t + BLOCK;
-    const stateCls = bk ? 'is-booked' : cov >= BLOCK ? '' : cov > 0 ? 'is-partial' : '';
-    const first = bk ? esc(bk.name.split(' ')[0]) : '';
-    const label = bk ? (startsHere ? (toMin(bk.time) === t ? first : `${first} ${bk.time}`) : 'continuare') : cov >= BLOCK ? `până la ${toTime(t + BLOCK)}` : cov > 0 ? `parțial, ${cov} min` : `până la ${toTime(t + BLOCK)}`;
-    return `<button class="tslot ${stateCls}" type="button" data-t="${t}" aria-pressed="${cov >= BLOCK || !!bk}"><b>${toTime(t)}</b><small>${label}</small></button>`;
+  // grila adaptivă pe toată fereastra zilei (08:30 - 21:15, lărgită dacă programul iese din ea)
+  const layout = () => {
+    const [w0, w1] = dayWindow();
+    const from = Math.min(w0, iv[0]?.[0] ?? w0, busy[0]?.[0] ?? w0);
+    const to = Math.max(w1, iv[iv.length - 1]?.[1] ?? w1, ...busy.map((x) => x[1]));
+    return adaptiveBlocks({ from, to, step, open: iv, busy });
+  };
+  const blockHTML = (k, i) => {
+    if (k.booked) {
+      return `<button class="tslot is-booked" type="button" data-i="${i}" aria-pressed="true" aria-label="${toTime(k.a)} - ${toTime(k.b)}, ${esc(k.ref.name)}"><b>${toTime(k.a)}</b><small>${esc(k.ref.name.split(' ')[0])} · ${k.b - k.a} min</small></button>`;
+    }
+    return `<button class="tslot ${k.b - k.a < step ? 'is-short' : ''}" type="button" data-i="${i}" aria-pressed="${k.open}"><b>${toTime(k.a)}</b><small>până la ${toTime(k.b)}</small></button>`;
   };
 
   const s = openSheet({
@@ -155,14 +173,23 @@ function daySheet(iso) {
           <div class="list__item"><span class="list__icon">${icon('user')}</span><span class="list__main"><b>${x.time} - ${toTime(toMin(x.time) + x.duration)} · ${esc(x.name)}</b><small>${esc(x.serviceName)} · ${x.duration} min</small></span></div>`).join('')}
         </div>` : ''}
 
-      <p class="sheet-sub">Ore deschise pentru clienți</p>
+      <p class="sheet-sub">Sloturi pentru clienți</p>
       <p class="lead" data-note style="font-size:14px">${custom ? 'Program setat manual pentru această zi.' : `Programul obișnuit de ${fmt.dow(d)}. Ce schimbi aici se aplică doar acestei zile.`}</p>
+      <div class="step-pick">
+        <span class="step-pick__label">Durata sloturilor <small data-stepnote></small></span>
+        <div class="dur-row" data-steps>${stepChips(step, 'step')}</div>
+      </div>
       <div class="day-tools">
         <button class="chip-btn chip-btn--sm" type="button" data-all>Toată ziua</button>
         <button class="chip-btn chip-btn--sm" type="button" data-none>Zi liberă</button>
         <button class="chip-btn chip-btn--sm" type="button" data-usual>Ca de obicei</button>
       </div>
       <div class="tslots" data-grid></div>
+      <div class="tslot-legend">
+        <span><i class="lg-slot-open"></i>Deschis</span>
+        <span><i class="lg-slot-off"></i>Închis</span>
+        <span><i class="lg-bk"></i>Programare</span>
+      </div>
 
       <p class="sheet-sub">Intervale exacte</p>
       <div class="iv-chips" data-ivs></div>
@@ -174,13 +201,16 @@ function daySheet(iso) {
         </div>
         <button class="btn btn--secondary btn--sm btn--block" type="button" data-addiv>${icon('plus')} <span data-addlabel></span></button>
       </div>
-      <p class="fineprint">${icon('info')}<span>Clienții se pot programa pe orice sfert de oră din intervalele deschise, dacă serviciul încape întreg (barbă 15 min, pachet complet 75 min). Orele cu programare nu se pot închide de aici.</span></p>`,
+      <p class="fineprint">${icon('info')}<span>Clienții se pot programa la începutul oricărui slot deschis. Un serviciu mai lung decât slotul (pachetul complet, 75 min) ocupă și slotul următor. După fiecare programare, sloturile se reașază de la ora la care se termină. Orele cu programare nu se pot închide de aici.</span></p>`,
     foot: '<button class="btn btn--primary btn--block" type="button" data-save>Salvează · <span data-total></span></button>',
   });
 
   const $ = (sel) => s.el.querySelector(sel);
   const refresh = () => {
-    $('[data-grid]').innerHTML = gridSlots().map(blockHTML).join('');
+    blocks = layout();
+    $('[data-grid]').innerHTML = blocks.map(blockHTML).join('');
+    $('[data-steps]').innerHTML = stepChips(step, 'step');
+    $('[data-stepnote]').textContent = step === defaultStep() ? '· ca de obicei' : `· doar în această zi (de obicei ${defaultStep()})`;
     $('[data-ivs]').innerHTML = iv.length
       ? toTimes(iv).map(([a, c], i) => `<span class="iv-chip">${a} - ${c}<button type="button" data-rmiv="${i}" aria-label="Șterge intervalul ${a} - ${c}">${icon('x', 'i--xs')}</button></span>`).join('')
       : '<span class="faint" style="font-size:13.5px;font-weight:700">Nicio oră deschisă. Ziua apare liberă pentru clienți.</span>';
@@ -195,29 +225,37 @@ function daySheet(iso) {
   });
 
   s.el.addEventListener('click', async (e) => {
-    const t = e.target.closest('[data-t],[data-all],[data-none],[data-usual],[data-dur],[data-addiv],[data-rmiv],[data-save]');
+    const t = e.target.closest('[data-i],[data-step],[data-all],[data-none],[data-usual],[data-dur],[data-addiv],[data-rmiv],[data-save]');
     if (!t) return;
-    if (t.dataset.t) {
-      const a = Number(t.dataset.t), b = a + BLOCK;
-      if (coverage(bIv, a, b) > 0 && coverage(iv, a, b) >= BLOCK) {
-        const bk = booked.find((x) => toMin(x.time) < b && a < toMin(x.time) + x.duration);
+    if (t.dataset.i != null) {
+      const k = blocks[Number(t.dataset.i)];
+      if (!k) return;
+      if (k.booked) {
         haptic('heavy');
-        toast(`${bk.name} are programare la ${bk.time}. Anuleaz-o din Agenda.`, { ic: 'info' });
+        toast(`${k.ref.name} are programare la ${k.ref.time}. Anuleaz-o din Agenda.`, { ic: 'info' });
         return;
       }
       haptic('select');
-      iv = coverage(iv, a, b) >= BLOCK ? subtract(iv, a, b) : union(iv, a, b);
+      iv = k.open ? subtract(iv, k.a, k.b) : union(iv, k.a, k.b);
       keepBooked();
       revert = false;
       refresh();
       return;
     }
-    if (t.hasAttribute('data-all')) { haptic(); const g = gridSlots(); iv = union(iv, g[0], g[g.length - 1] + BLOCK); revert = false; refresh(); return; }
+    if (t.dataset.step) {
+      haptic('select');
+      step = Number(t.dataset.step);
+      revert = false;
+      refresh();
+      return;
+    }
+    if (t.hasAttribute('data-all')) { haptic(); const [w0, w1] = dayWindow(); iv = union(iv, w0, w1); revert = false; refresh(); return; }
     if (t.hasAttribute('data-none')) { haptic(); iv = []; keepBooked(); revert = false; refresh(); return; }
     if (t.hasAttribute('data-usual')) {
       haptic();
       iv = templateIv(d.getDay());
       keepBooked();
+      step = defaultStep();
       revert = true;
       $('[data-note]').textContent = `Revine la programul obișnuit de ${fmt.dow(d)}.`;
       refresh();
@@ -243,7 +281,8 @@ function daySheet(iso) {
     }
     if (t.dataset.rmiv != null) {
       const [a, b] = iv[Number(t.dataset.rmiv)];
-      if (coverage(bIv, a, b) > 0) {
+      const hit = bIv.some(([x, y]) => x < b && a < y);
+      if (hit) {
         haptic('heavy');
         // păstrează doar bucățile cu programări
         iv = normalize([...subtract(iv, a, b), ...bIv]);
@@ -259,9 +298,14 @@ function daySheet(iso) {
     if (t.hasAttribute('data-save')) {
       t.disabled = true;
       const next = clone(sched());
-      if (revert && JSON.stringify(normalize(templateIv(d.getDay()))) === JSON.stringify(iv)) delete next.days[iso];
+      // orele egale cu programul obișnuit nu se salvează ca excepție (de ex. când schimbi doar durata sloturilor)
+      const same = JSON.stringify(normalize(templateIv(d.getDay()))) === JSON.stringify(iv);
+      if (same && (revert || !custom)) delete next.days[iso];
       else next.days[iso] = toTimes(iv);
+      if (step === defaultStep()) delete next.steps[iso];
+      else next.steps[iso] = step;
       for (const k of Object.keys(next.days)) if (k < todayIso()) delete next.days[k];
+      for (const k of Object.keys(next.steps)) if (k < todayIso()) delete next.steps[k];
       const ok = await save(next, `Program salvat: ${fmt.dayLong(d).toLowerCase()}`);
       t.disabled = false;
       if (ok) s.close();
@@ -272,6 +316,7 @@ function daySheet(iso) {
 /* ---------- programul obișnuit ---------- */
 function weekSheet() {
   const model = {};
+  let step = defaultStep();
   for (const [d] of WEEK) {
     const iv = templateIv(d);
     model[d] = iv.length ? { on: true, start: iv[0][0], end: iv[iv.length - 1][1] } : { on: false, start: toMin('08:30'), end: toMin('16:45') };
@@ -293,7 +338,11 @@ function weekSheet() {
   };
   const s = openSheet({
     title: 'Program obișnuit',
-    body: `<p class="lead">Orele implicite pentru fiecare zi a săptămânii. Zilele setate manual în calendar rămân cum le-ai setat.</p>
+    body: `<p class="lead">Orele și sloturile implicite pentru fiecare zi a săptămânii. Zilele setate manual în calendar rămân cum le-ai setat.</p>
+      <div class="step-pick" style="margin-top:16px">
+        <span class="step-pick__label">Durata sloturilor <small>· minute</small></span>
+        <div class="dur-row" data-wsteps>${stepChips(step, 'wstep')}</div>
+      </div>
       <div class="wk" style="margin:16px 0 0" data-week>${WEEK.map(([d, n]) => rowHTML(d, n)).join('')}</div>`,
     foot: '<button class="btn btn--primary btn--block" type="button" data-save>Salvează programul obișnuit</button>',
   });
@@ -305,6 +354,8 @@ function weekSheet() {
     model[t.dataset.d][t.dataset.k] = Number(t.value);
   });
   s.el.addEventListener('click', async (e) => {
+    const ws = e.target.closest('[data-wstep]');
+    if (ws) { haptic('select'); step = Number(ws.dataset.wstep); s.el.querySelector('[data-wsteps]').innerHTML = stepChips(step, 'wstep'); return; }
     const tg = e.target.closest('[data-toggle]');
     if (tg) { haptic('select'); const w = model[tg.dataset.toggle]; w.on = !w.on; rerender(); return; }
     const sv = e.target.closest('[data-save]');
@@ -313,6 +364,7 @@ function weekSheet() {
     if (bad.length) { haptic('heavy'); toast(`Verifică orele pentru ${bad.map(([, n]) => n.toLowerCase()).join(', ')}`, { ic: 'clock', tone: 'red' }); return; }
     const next = clone(sched());
     for (const [d] of WEEK) next.week[d] = model[d].on ? [[toTime(model[d].start), toTime(model[d].end)]] : [];
+    next.step = step;
     sv.disabled = true;
     const ok = await save(next, 'Programul obișnuit a fost salvat');
     sv.disabled = false;

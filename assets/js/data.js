@@ -4,8 +4,7 @@ export const CONFIG = {
   // URL-ul aplicației web Google Apps Script (vezi backend/README.md).
   // Gol = aplicația funcționează local: disponibilitate simulată, reamintiri pe telefon.
   apiUrl: 'https://script.google.com/macros/s/AKfycbxD4fJphTnl7Yud99JmYLvCGyyfMtUdpOwsOP-IV8EsvQjhlCN11sRBnvsu8yIawo20DA/exec',
-  slotStep: 45,            // mărimea blocurilor din grila pe care o bifează frizerii, în minute
-  startStep: 15,           // clienții pot începe pe orice sfert de oră liber din intervalele deschise
+  slotStep: 45,            // durata implicită a sloturilor (frizerul o poate schimba pe zi: 15, 30, 45...)
   slotStart: '08:30',      // primul interval din grila pe care o bifează frizerii
   slotEnd: '21:15',        // ultimul interval se termină cel târziu la această oră
   minLeadMinutes: 30,      // cât de devreme se poate face o programare pentru azi

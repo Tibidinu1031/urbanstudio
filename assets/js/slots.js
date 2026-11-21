@@ -49,12 +49,13 @@ export function worksOn(date, barberId) {
 
 const overlaps = (blocks, a, b) => blocks.some(([x, y]) => a < y && b > x);
 
-/* grila de intervale (implicit 45 de minute de la 08:30): începuturile, în minute */
-export function gridSlots() {
-  const out = [];
-  const end = toMin(CONFIG.slotEnd || '21:15');
-  for (let t = toMin(CONFIG.slotStart || '08:30'); t + CONFIG.slotStep <= end; t += CONFIG.slotStep) out.push(t);
-  return out;
+/* fereastra zilei din panou (implicit 08:30 - 21:15), în minute */
+export const dayWindow = () => [toMin(CONFIG.slotStart || '08:30'), toMin(CONFIG.slotEnd || '21:15')];
+
+/* durata sloturilor unui frizer într-o zi: setată pe zi, altfel implicita frizerului, altfel cea a salonului */
+export function stepFor(barber, iso) {
+  const s = barber?.schedule || {};
+  return Number(s.steps?.[iso]) || Number(s.step) || CONFIG.slotStep;
 }
 
 /* ---------- matematică pe intervale (în minute) ---------- */
@@ -82,30 +83,50 @@ export const coverage = (iv, a, b) => iv.reduce((s, [x, y]) => s + Math.max(0, M
 export const totalMinutes = (iv) => normalize(iv).reduce((s, [a, b]) => s + b - a, 0);
 export const toTimes = (iv) => normalize(iv).map(([a, b]) => [toTime(a), toTime(b)]);
 
-/* intervalele bifate (începuturi în minute) → intervale continue [['08:30','10:00'], ...] */
-export function mergeSlots(starts) {
-  return toTimes(starts.map((t) => [t, t + CONFIG.slotStep]));
+/* Program adaptiv: sloturi de `step` minute care o iau de la capăt la începutul fiecărui interval deschis
+   și imediat după fiecare programare. Un tuns de barbă de 15 minute la 10:00 nu „mănâncă” restul slotului:
+   următorul slot începe la 10:15, nu la 10:45.
+   busy: [[start, sfârșit, date opționale], ...] în minute. Întoarce blocuri { a, b, open, booked, ref }. */
+export function adaptiveBlocks({ from, to, step, open = [], busy = [] }) {
+  const iv = normalize(open);
+  const bz = busy.filter(([x, y]) => y > x).slice().sort((p, q) => p[0] - q[0]);
+  const cuts = [...new Set([...iv.flat(), ...bz.flatMap(([x, y]) => [x, y])])].sort((p, q) => p - q);
+  const out = [];
+  let t = from;
+  while (t < to) {
+    const bk = bz.find(([x, y]) => x <= t && t < y);
+    if (bk) { out.push({ a: bk[0], b: bk[1], booked: true, ref: bk[2] }); t = bk[1]; continue; }
+    const cut = cuts.find((p) => p > t);
+    const end = Math.min(t + step, to, cut ?? Infinity);
+    out.push({ a: t, b: end, open: coverage(iv, t, end) >= end - t, booked: false });
+    t = end;
+  }
+  return out;
 }
 
-/* Clienții pot începe pe orice sfert de oră liber din intervalele deschise de frizer,
-   dacă serviciul (15, 30, 45, 75 de minute...) încape întreg în interval și nu se suprapune cu altă programare. */
+/* Orele la care se poate programa un client: începutul fiecărui slot liber din grila adaptivă,
+   dacă serviciul (15, 30, 45, 75 de minute...) încape în timpul liber care urmează (poate ocupa mai multe sloturi). */
 export function freeSlots(date, barberId, duration, { ignoreId, ignoreLead = false, barbers, busyFn } = {}) {
   const iso = fmt.iso(date);
   const now = new Date();
   const isToday = iso === fmt.iso(now);
   const nowMin = now.getHours() * 60 + now.getMinutes();
   const minStart = !isToday ? -1 : ignoreLead ? nowMin : nowMin + CONFIG.minLeadMinutes;
-  const step = CONFIG.startStep || 15;
   const map = new Map();
   const list = barbers ? barbers.filter((b) => b.active !== false && (!barberId || barberId === 'any' || b.id === barberId)) : pool(barberId);
   for (const b of list) {
+    const iv = normalize(barberIntervals(b, date));
+    if (!iv.length) continue;
     const busy = busyFn ? busyFn(iso, b.id) : Api.busy(iso, b.id, ignoreId);
-    for (const [a, c] of normalize(barberIntervals(b, date))) {
-      for (let t = a; t + duration <= c; t += step) {
-        if (t < minStart || overlaps(busy, t, t + duration)) continue;
-        if (!map.has(t)) map.set(t, new Set());
-        map.get(t).add(b.id);
-      }
+    const blocks = adaptiveBlocks({ from: iv[0][0], to: iv[iv.length - 1][1], step: stepFor(b, iso), open: iv, busy });
+    for (const blk of blocks) {
+      const t = blk.a;
+      if (blk.booked || !blk.open || t < minStart) continue;
+      const ivEnd = iv.find(([a, c]) => a <= t && t < c)[1];
+      const nextBusy = busy.reduce((m, [x]) => (x >= t && x < m ? x : m), Infinity);
+      if (Math.min(ivEnd, nextBusy) - t < duration || overlaps(busy, t, t + duration)) continue;
+      if (!map.has(t)) map.set(t, new Set());
+      map.get(t).add(b.id);
     }
   }
   return [...map.entries()].sort((a, b) => a[0] - b[0]).map(([t, ids]) => ({ time: toTime(t), min: t, barbers: [...ids] }));
